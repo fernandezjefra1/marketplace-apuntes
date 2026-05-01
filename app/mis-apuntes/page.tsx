@@ -68,33 +68,36 @@ export default function MisApuntes() {
       )}
       <p className="text-gray-400 text-sm mb-4 line-clamp-2">{apunte.descripcion}</p>
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => window.location.href = `/apunte/${apunte.id}`}
-          className="flex-1 py-2 rounded-xl text-sm font-semibold border transition"
-          style={{ borderColor: '#EA580C', color: '#EA580C' }}
-        >
-          Ver detalle
-        </button>
-        {apunte.archivo_url && (
-          <button
-            onClick={() => window.open(apunte.archivo_url, '_blank')}
-            className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition"
-            style={{ backgroundColor: '#EA580C' }}
-          >
-            Descargar
-          </button>
-        )}
-      </div>
-
-      {!esComprado && (
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-          <p className="text-xs text-gray-400">
-            {new Date(apunte.created_at).toLocaleDateString('es-PE')}
-          </p>
-          <span className="text-xs font-semibold text-green-600">Publicado</span>
-        </div>
-      )}
+      <div className="flex gap-2 flex-wrap">
+  <button
+    onClick={() => window.location.href = `/apunte/${apunte.id}`}
+    className="flex-1 py-2 rounded-xl text-sm font-semibold border transition"
+    style={{ borderColor: '#EA580C', color: '#EA580C' }}
+  >
+    Ver detalle
+  </button>
+  {apunte.archivo_url && (
+    <button
+      onClick={() => window.open(apunte.archivo_url, '_blank')}
+      className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition"
+      style={{ backgroundColor: '#EA580C' }}
+    >
+      Descargar
+    </button>
+  )}
+  {!esComprado && (
+    <button
+      onClick={async () => {
+        if (!confirm('Seguro que quieres eliminar este apunte?')) return
+        await supabase.from('apuntes').delete().eq('id', apunte.id)
+        window.location.reload()
+      }}
+      className="w-full py-2 rounded-xl text-sm font-semibold border border-red-200 text-red-500 hover:bg-red-50 transition mt-1"
+    >
+      Eliminar apunte
+    </button>
+  )}
+</div>
     </div>
   )
 
