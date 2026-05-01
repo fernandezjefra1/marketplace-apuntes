@@ -16,6 +16,17 @@ const CARRERAS = [
 
 const CICLOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
 
+const PALABRAS_PROHIBIDAS = [
+  'mierda', 'puta', 'puto', 'idiota', 'imbecil', 'estupido',
+  'maldito', 'carajo', 'concha', 'huevon', 'cojudo', 'pendejo',
+  'cabron', 'bastardo', 'culo', 'porno', 'sexo', 'drogas'
+]
+
+const contienePalabraProhibida = (texto: string) => {
+  const textoLower = texto.toLowerCase()
+  return PALABRAS_PROHIBIDAS.some(palabra => textoLower.includes(palabra))
+}
+
 export default function SubirApunte() {
   const [user, setUser] = useState<any>(null)
   const [titulo, setTitulo] = useState('')
@@ -39,6 +50,11 @@ export default function SubirApunte() {
   }, [])
 
 const handleSubir = async () => {
+  if (contienePalabraProhibida(titulo) || contienePalabraProhibida(descripcion || '')) {
+  setError('El contenido contiene palabras inapropiadas. Por favor revisa el titulo y descripcion.')
+  setLoading(false)
+  return
+}
   if (!titulo || !carrera || !ciclo || !curso) {
     setError('Por favor completa todos los campos obligatorios')
     return
