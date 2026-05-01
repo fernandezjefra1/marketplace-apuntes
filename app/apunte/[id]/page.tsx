@@ -11,6 +11,11 @@ export default function DetalleApunte() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [yaCompro, setYaCompro] = useState(false)
+  const [valoracion, setValoracion] = useState(0)
+  const [comentario, setComentario] = useState('')
+  const [yaValoro, setYaValoro] = useState(false)
+  const [valoraciones, setValoraciones] = useState<any[]>([])
+  const [enviandoValoracion, setEnviandoValoracion] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -38,6 +43,18 @@ export default function DetalleApunte() {
         setYaCompro(!!compra)
       }
 
+      const { data: vals } = await supabase
+        .from('valoraciones')
+        .select('*')
+        .eq('apunte_id', id)
+      setValoraciones(vals || [])
+
+      const yaVal = vals?.find((v: any) => v.usuario_id === userData.user.id)
+      if (yaVal) {
+        setYaValoro(true)
+        setValoracion(yaVal.puntuacion)
+      }
+
       setLoading(false)
     }
     cargar()
@@ -50,6 +67,28 @@ export default function DetalleApunte() {
   const handleComprar = () => {
     alert('Pagos con Culqi proximamente!')
   }
+
+  const handleValorar = async () => {
+    if (valoracion === 0) return
+    setEnviandoValoracion(true)
+    await supabase.from('valoraciones').insert({
+      apunte_id: id,
+      usuario_id: user.id,
+      puntuacion: valoracion,
+      comentario,
+    })
+    setYaValoro(true)
+    setEnviandoValoracion(false)
+    const { data: vals } = await supabase
+      .from('valoraciones')
+      .select('*')
+      .eq('apunte_id', id)
+    setValoraciones(vals || [])
+  }
+
+  const promedioValoracion = valoraciones.length > 0
+    ? (valoraciones.reduce((acc, v) => acc + v.puntuacion, 0) / valoraciones.length).toFixed(1)
+    : null
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -141,6 +180,77 @@ export default function DetalleApunte() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Valoraciones */}
+            <div className="bg-white rounded-2xl shadow-sm p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-bold text-gray-800 text-lg">Valoraciones</h3>
+                {promedioValoracion && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-gray-800">{promedioValoracion}</span>
+                    <span className="text-yellow-400 text-xl">⭐</span>
+                    <span className="text-gray-400 text-sm">({valoraciones.length})</span>
+                  </div>
+                )}
+              </div>
+
+              {!esDueno && !yaValoro && (
+                <div className="border border-gray-100 rounded-xl p-4 mb-6">
+                  <p className="font-semibold text-gray-700 text-sm mb-3">Deja tu valoracion</p>
+                  <div className="flex gap-2 mb-3">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <button key={star} onClick={() => setValoracion(star)}
+                        className="text-3xl transition hover:scale-110">
+                        {star <= valoracion ? '⭐' : '☆'}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    placeholder="Comentario opcional..."
+                    value={comentario}
+                    onChange={(e) => setComentario(e.target.value)}
+                    rows={2}
+                    className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none resize-none mb-3"
+                  />
+                  <button
+                    onClick={handleValorar}
+                    disabled={valoracion === 0 || enviandoValoracion}
+                    className="text-white px-6 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                    style={{ backgroundColor: '#EA580C' }}
+                  >
+                    {enviandoValoracion ? 'Enviando...' : 'Enviar valoracion'}
+                  </button>
+                </div>
+              )}
+
+              {yaValoro && (
+                <div className="bg-green-50 rounded-xl p-4 mb-6 text-center">
+                  <p className="text-green-600 text-sm font-semibold">Ya valoraste este apunte</p>
+                </div>
+              )}
+
+              {valoraciones.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-4">No hay valoraciones aun</p>
+              ) : (
+                <div className="space-y-4">
+                  {valoraciones.map((v, i) => (
+                    <div key={i} className="border-b border-gray-50 pb-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-yellow-400">
+                          {'⭐'.repeat(v.puntuacion)}{'☆'.repeat(5 - v.puntuacion)}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {new Date(v.created_at).toLocaleDateString('es-PE')}
+                        </span>
+                      </div>
+                      {v.comentario && (
+                        <p className="text-gray-600 text-sm">{v.comentario}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
