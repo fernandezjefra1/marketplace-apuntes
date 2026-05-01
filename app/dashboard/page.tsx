@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 
 const CARRERAS = [
   'Administracion',
+  'Medicina humana',
   'Contabilidad', 
   'Derecho',
   'Ingenieria de Sistemas',
