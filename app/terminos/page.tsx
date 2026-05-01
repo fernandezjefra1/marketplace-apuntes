@@ -1,3 +1,4 @@
+'use client'
 export default function Terminos() {
   return (
     <div className="min-h-screen bg-white">
