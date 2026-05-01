@@ -37,11 +37,19 @@ export default function SubirApunte() {
     getUser()
   }, [])
 
-  const handleSubir = async () => {
-    if (!titulo || !carrera || !ciclo || !curso) {
-      setError('Por favor completa todos los campos obligatorios')
-      return
-    }
+const handleSubir = async () => {
+  if (!titulo || !carrera || !ciclo || !curso) {
+    setError('Por favor completa todos los campos obligatorios')
+    return
+  }
+  if (!archivo) {
+    setError('Debes seleccionar un archivo PDF')
+    return
+  }
+  if (precio !== '0' && parseFloat(precio) < 3) {
+    setError('El precio minimo para apuntes de pago es S/. 3.00')
+    return
+  }
     if (!archivo) {
       setError('Debes seleccionar un archivo PDF')
       return
