@@ -91,6 +91,13 @@ export default function Dashboard() {
 >
   Mis apuntes
 </button>
+<button
+  onClick={() => window.location.href = '/admin'}
+  className="text-sm font-semibold px-3 py-1 rounded-lg text-white"
+  style={{ backgroundColor: '#EA580C' }}
+>
+  Admin
+</button>
             <button onClick={cerrarSesion} className="text-sm text-gray-500 hover:text-red-500 transition">
               Salir
             </button>
