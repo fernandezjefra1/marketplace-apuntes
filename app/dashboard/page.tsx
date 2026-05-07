@@ -3,17 +3,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 
 const CARRERAS = [
-  'Administracion',
-  'Medicina humana',
-  'Contabilidad', 
-  'Derecho',
-  'Ingenieria de Sistemas',
-  'Ingenieria Civil',
-  'Psicologia',
-  'Enfermeria',
-  'Marketing',
+  'Administracion', 'Contabilidad', 'Derecho',
+  'Ingenieria de Sistemas', 'Ingenieria Civil',
+  'Psicologia', 'Enfermeria', 'Marketing',
 ]
-
 const CICLOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
 
 export default function Dashboard() {
@@ -23,8 +16,10 @@ export default function Dashboard() {
   const [carreraFiltro, setCarreraFiltro] = useState('')
   const [cicloFiltro, setCicloFiltro] = useState('')
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const getUser = async () => {
       const { data } = await supabase.auth.getUser()
       if (!data.user) { window.location.href = '/'; return }
@@ -65,43 +60,43 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#F8F9FA' }}>
 
       {/* Navbar */}
-      <nav className="bg-white shadow-sm sticky top-0 z-10">
+      <nav className="bg-white border-b border-gray-100 sticky top-0 z-10"
+        style={{ backdropFilter: 'blur(10px)' }}>
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📖</span>
+          <div className="flex items-center gap-3 cursor-pointer"
+            onClick={() => window.location.href = '/dashboard'}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+              style={{ backgroundColor: '#EA580C' }}>A</div>
             <div>
-              <h1 className="font-bold text-gray-800 leading-none">ApuntesUA</h1>
+              <h1 className="font-bold text-gray-800 leading-none text-sm">ApuntesUA</h1>
               <p className="text-xs text-gray-400">Universidad Autonoma del Peru</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500 hidden md:block">{user?.email}</span>
-            <button
-              onClick={() => window.location.href = '/subir'}
-              className="text-white text-sm px-4 py-2 rounded-xl font-semibold"
-              style={{ backgroundColor: '#EA580C' }}
-            >
-              + Subir apunte
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400 hidden md:block bg-gray-100 px-3 py-1 rounded-full">
+              {user?.email}
+            </span>
+            <button onClick={() => window.location.href = '/mis-apuntes'}
+              className="text-sm text-gray-500 hover:text-gray-700 transition font-medium">
+              Mis apuntes
             </button>
-            <button
-  onClick={() => window.location.href = '/mis-apuntes'}
-  className="text-sm text-gray-500 hover:text-gray-700 transition"
->
-  Mis apuntes
-</button>
-{user?.email === 'fernandezjefra1@autonoma.edu.pe' && (
-  <button
-    onClick={() => window.location.href = '/admin'}
-    className="text-sm font-semibold px-3 py-1 rounded-lg text-white"
-    style={{ backgroundColor: '#EA580C' }}
-  >
-    Admin
-  </button>
-)}
-            <button onClick={cerrarSesion} className="text-sm text-gray-500 hover:text-red-500 transition">
+            {user?.email === 'fernandezjefra1@autonoma.edu.pe' && (
+              <button onClick={() => window.location.href = '/admin'}
+                className="text-xs font-bold px-3 py-1 rounded-lg text-white"
+                style={{ backgroundColor: '#EA580C' }}>
+                Admin
+              </button>
+            )}
+            <button onClick={() => window.location.href = '/subir'}
+              className="text-white text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2 hover:opacity-90 transition"
+              style={{ backgroundColor: '#EA580C' }}>
+              <span>+</span> Subir
+            </button>
+            <button onClick={cerrarSesion}
+              className="text-sm text-gray-400 hover:text-red-400 transition">
               Salir
             </button>
           </div>
@@ -110,129 +105,182 @@ export default function Dashboard() {
 
       <div className="max-w-6xl mx-auto px-6 py-8">
 
-        {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">Encuentra tus apuntes</h2>
-          <p className="text-gray-400 text-sm mt-1">Filtra por carrera, ciclo o busca por nombre</p>
+        {/* Hero bienvenida */}
+        <div
+          className="rounded-2xl p-8 mb-8 text-white relative overflow-hidden"
+          style={{
+            backgroundColor: '#EA580C',
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.5s ease'
+          }}
+        >
+          <div className="relative z-10">
+            <p className="text-orange-200 text-sm font-medium mb-1">Bienvenido de vuelta 👋</p>
+            <h2 className="text-2xl font-bold mb-1">{user?.email?.split('@')[0]}</h2>
+            <p className="text-orange-100 text-sm">Encuentra los mejores apuntes de la UA</p>
+          </div>
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 text-8xl opacity-20">📚</div>
+          <div className="absolute -bottom-4 -left-4 w-24 h-24 rounded-full opacity-10"
+            style={{ backgroundColor: 'white' }}></div>
+        </div>
+
+        {/* Stats rápidas */}
+        <div
+          className="grid grid-cols-3 gap-4 mb-8"
+          style={{
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.6s ease 0.1s'
+          }}
+        >
+          {[
+            { icon: '📄', label: 'Apuntes disponibles', value: apuntes.length },
+            { icon: '🎁', label: 'Apuntes gratis', value: apuntes.filter(a => !a.precio || a.precio === 0).length },
+            { icon: '💰', label: 'Apuntes de pago', value: apuntes.filter(a => a.precio > 0).length },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white rounded-2xl p-5 text-center shadow-sm hover:shadow-md transition-shadow">
+              <p className="text-2xl mb-2">{stat.icon}</p>
+              <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
+              <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
+            </div>
+          ))}
         </div>
 
         {/* Buscador y filtros */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 mb-8">
-          <input
-            type="text"
-            placeholder="Buscar por titulo, curso o tema..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none mb-4"
-          />
+        <div
+          className="bg-white rounded-2xl shadow-sm p-6 mb-6"
+          style={{
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.6s ease 0.2s'
+          }}
+        >
+          <div className="relative mb-4">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <input
+              type="text"
+              placeholder="Buscar por titulo, curso o tema..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full border border-gray-100 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-orange-300 bg-gray-50 transition"
+            />
+          </div>
 
-          <div className="flex flex-wrap gap-4">
-            {/* Filtro carrera */}
+          <div className="flex flex-wrap gap-3">
             <div className="flex-1 min-w-48">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Carrera</label>
               <select
                 value={carreraFiltro}
                 onChange={(e) => setCarreraFiltro(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none"
+                className="w-full border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none bg-gray-50 text-gray-600"
               >
                 <option value="">Todas las carreras</option>
                 {CARRERAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-
-            {/* Filtro ciclo */}
             <div className="flex-1 min-w-48">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Ciclo</label>
               <select
                 value={cicloFiltro}
                 onChange={(e) => setCicloFiltro(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none"
+                className="w-full border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none bg-gray-50 text-gray-600"
               >
                 <option value="">Todos los ciclos</option>
                 {CICLOS.map(c => <option key={c} value={c}>Ciclo {c}</option>)}
               </select>
             </div>
-
-            {/* Limpiar filtros */}
             {(busqueda || carreraFiltro || cicloFiltro) && (
-              <div className="flex items-end">
-                <button
-                  onClick={limpiarFiltros}
-                  className="px-4 py-3 text-sm rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
-                >
-                  Limpiar filtros
-                </button>
-              </div>
+              <button onClick={limpiarFiltros}
+                className="px-4 py-3 text-sm rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition font-medium">
+                Limpiar
+              </button>
             )}
           </div>
         </div>
 
         {/* Resultados */}
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-400 font-medium">
             {apuntesFiltrados.length} apunte{apuntesFiltrados.length !== 1 ? 's' : ''} encontrado{apuntesFiltrados.length !== 1 ? 's' : ''}
           </p>
         </div>
 
         {loading ? (
-          <div className="text-center py-20 text-gray-400">Cargando apuntes...</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white rounded-2xl p-6 animate-pulse">
+                <div className="h-4 bg-gray-100 rounded mb-3 w-2/3"></div>
+                <div className="h-6 bg-gray-100 rounded mb-2"></div>
+                <div className="h-4 bg-gray-100 rounded w-1/2"></div>
+              </div>
+            ))}
+          </div>
         ) : apuntesFiltrados.length === 0 ? (
-          <div className="text-center py-20">
+          <div className="text-center py-20"
+            style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease' }}>
             <p className="text-6xl mb-4">📭</p>
-            <p className="text-gray-500 font-semibold">No hay apuntes aun</p>
-            <p className="text-gray-400 text-sm mt-1">Se el primero en subir uno</p>
-            <button
-              onClick={() => window.location.href = '/subir'}
-              className="mt-4 text-white px-6 py-2 rounded-xl text-sm font-semibold"
-              style={{ backgroundColor: '#EA580C' }}
-            >
-              Subir apunte
+            <p className="text-gray-600 font-semibold text-lg">No hay apuntes aun</p>
+            <p className="text-gray-400 text-sm mt-1 mb-6">Se el primero en compartir uno</p>
+            <button onClick={() => window.location.href = '/subir'}
+              className="text-white px-6 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition"
+              style={{ backgroundColor: '#EA580C' }}>
+              Subir mi primer apunte
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {apuntesFiltrados.map((apunte) => (
-              <div key={apunte.id} className="bg-white rounded-2xl shadow-sm p-6 hover:shadow-md transition">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full text-white mr-2"
+            {apuntesFiltrados.map((apunte, index) => (
+              <div
+                key={apunte.id}
+                className="bg-white rounded-2xl shadow-sm p-6 hover:shadow-lg cursor-pointer group"
+                style={{
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+                  transition: `all 0.5s ease ${index * 0.05}s`,
+                }}
+                onClick={() => window.location.href = `/apunte/${apunte.id}`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="text-xs font-semibold px-2 py-1 rounded-lg text-white"
                       style={{ backgroundColor: '#EA580C' }}>
                       {apunte.carrera || 'General'}
                     </span>
                     {apunte.ciclo && (
-                      <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                      <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-100 text-gray-600">
                         Ciclo {apunte.ciclo}
                       </span>
                     )}
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 rounded-full text-white"
-                    style={{ backgroundColor: apunte.precio > 0 ? '#1D4ED8' : '#16A34A' }}>
+                  <span className="text-xs font-bold px-3 py-1 rounded-lg text-white"
+                    style={{ backgroundColor: apunte.precio > 0 ? '#3B82F6' : '#16A34A' }}>
                     {apunte.precio > 0 ? `S/. ${apunte.precio}` : 'Gratis'}
                   </span>
                 </div>
 
-                <p className="text-3xl mb-2">📄</p>
-                <h3 className="font-bold text-gray-800 mb-1">{apunte.titulo}</h3>
-                {apunte.curso && (
-                  <p className="text-xs text-orange-500 font-semibold mb-1">Curso: {apunte.curso}</p>
-                )}
-                <p className="text-gray-400 text-sm mb-4 line-clamp-2">{apunte.descripcion}</p>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                  style={{ backgroundColor: '#FFF7ED' }}>
+                  <span className="text-xl">📄</span>
+                </div>
 
-                <button
-  onClick={() => window.location.href = `/apunte/${apunte.id}`}
-  className="w-full py-2 rounded-xl text-sm font-semibold border transition hover:text-white"
-  style={{ borderColor: '#EA580C', color: '#EA580C' }}
-  onMouseEnter={e => {
-    (e.target as HTMLButtonElement).style.backgroundColor = '#EA580C'
-    ;(e.target as HTMLButtonElement).style.color = 'white'
-  }}
-  onMouseLeave={e => {
-    (e.target as HTMLButtonElement).style.backgroundColor = 'transparent'
-    ;(e.target as HTMLButtonElement).style.color = '#EA580C'
-  }}
->
-  Ver apunte
-</button>
+                <h3 className="font-bold text-gray-800 mb-1 group-hover:text-orange-600 transition-colors">
+                  {apunte.titulo}
+                </h3>
+                {apunte.curso && (
+                  <p className="text-xs font-semibold mb-2" style={{ color: '#EA580C' }}>
+                    {apunte.curso}
+                  </p>
+                )}
+                <p className="text-gray-400 text-sm line-clamp-2 mb-4">{apunte.descripcion}</p>
+
+                <div className="flex items-center justify-between pt-3 border-t border-gray-50">
+                  <span className="text-xs text-gray-400">
+                    {new Date(apunte.created_at).toLocaleDateString('es-PE')}
+                  </span>
+                  <span className="text-xs font-semibold group-hover:underline"
+                    style={{ color: '#EA580C' }}>
+                    Ver apunte →
+                  </span>
+                </div>
               </div>
             ))}
           </div>
