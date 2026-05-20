@@ -1,7 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-// El cliente se inicializa una vez — la API key viene de ANTHROPIC_API_KEY en .env.local
-const client = new Anthropic()
+import { GoogleGenerativeAI, GoogleGenerativeAIFetchError } from '@google/generative-ai'
 
 // Tipos del resultado que devuelve este endpoint
 export interface ResultadoAnalisis {
@@ -22,7 +19,7 @@ export interface ResultadoAnalisis {
   apto_pack_examen: boolean
 }
 
-// Calcula la banda correcta según el score — sirve para validar/corregir la respuesta de Claude
+// Calcula la banda correcta según el score — evita inconsistencias en la respuesta del modelo
 function calcularBanda(score: number): Pick<ResultadoAnalisis, 'banda_precio' | 'precio_min' | 'precio_max'> {
   if (score < 40) return { banda_precio: 'rechazado', precio_min: 0, precio_max: 0 }
   if (score < 60) return { banda_precio: 'gratis',    precio_min: 0, precio_max: 0 }
@@ -69,6 +66,14 @@ Devuelve EXACTAMENTE este JSON (sin texto extra antes o después):
 }`
 
 export async function POST(request: Request) {
+  const apiKey = process.env.GEMINI_API_KEY ?? ''
+  if (!apiKey || apiKey.includes('XXXXXXXXX') || apiKey === 'TU_CLAVE_AQUI') {
+    return Response.json(
+      { error: 'GEMINI_API_KEY no está configurada. Agrégala en .env.local y reinicia el servidor.' },
+      { status: 503 }
+    )
+  }
+
   try {
     let body: { pdfBase64?: unknown }
     try {
@@ -89,62 +94,46 @@ export async function POST(request: Request) {
       )
     }
 
-    // Llamada a Claude con el PDF vía Documents API
-    // Nota: claude-sonnet-4-6 reemplaza al deprecado claude-sonnet-4-20250514
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: pdfBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: PROMPT_EVALUACION,
-            },
-          ],
+    // Llamada a Gemini 1.5 Flash con el PDF en base64
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: pdfBase64,
         },
-      ],
-    })
+      },
+      { text: PROMPT_EVALUACION },
+    ])
 
-    const textBlock = response.content.find(b => b.type === 'text')
-    if (!textBlock || textBlock.type !== 'text') {
-      throw new Error('Claude no devolvió un bloque de texto.')
-    }
+    const text = result.response.text()
 
-    // Parseo del JSON — si Claude añadió texto extra, extrae el objeto con regex
+    // Parseo del JSON — si el modelo añadió texto extra, extrae el objeto con regex
     let resultado: ResultadoAnalisis
     try {
-      resultado = JSON.parse(textBlock.text.trim())
+      resultado = JSON.parse(text.trim())
     } catch {
-      const match = textBlock.text.match(/\{[\s\S]*\}/)
+      const match = text.match(/\{[\s\S]*\}/)
       if (!match) {
-        throw new Error('La respuesta de IA no contiene JSON válido.')
+        throw new Error('La respuesta de la IA no contiene JSON válido.')
       }
       resultado = JSON.parse(match[0])
     }
 
-    // Corrección de seguridad: recalcula la banda en base al score para evitar
-    // inconsistencias entre score_total y banda_precio devueltos por Claude
+    // Corrección: recalcula la banda desde score_total para evitar inconsistencias
     const bandaCorrecta = calcularBanda(resultado.score_total)
-    resultado.banda_precio = bandaCorrecta.banda_precio
-    resultado.precio_min   = bandaCorrecta.precio_min
-    resultado.precio_max   = bandaCorrecta.precio_max
-    resultado.apto_pack_examen = resultado.score_total >= 90
+    resultado.banda_precio      = bandaCorrecta.banda_precio
+    resultado.precio_min        = bandaCorrecta.precio_min
+    resultado.precio_max        = bandaCorrecta.precio_max
+    resultado.apto_pack_examen  = resultado.score_total >= 90
 
     return Response.json(resultado)
 
   } catch (error) {
-    if (error instanceof Anthropic.APIError) {
-      console.error(`[analizar-apunte] Error de API Claude ${error.status}:`, error.message)
+    if (error instanceof GoogleGenerativeAIFetchError) {
+      console.error(`[analizar-apunte] Error Gemini ${error.status}:`, error.message)
 
       if (error.status === 429) {
         return Response.json(
@@ -152,9 +141,9 @@ export async function POST(request: Request) {
           { status: 429 }
         )
       }
-      if (error.status === 413) {
+      if (error.status === 413 || error.message?.includes('too large')) {
         return Response.json(
-          { error: 'El PDF es demasiado grande para analizar. El límite es 10 MB.' },
+          { error: 'El PDF es demasiado grande. El límite es 20 MB.' },
           { status: 413 }
         )
       }
