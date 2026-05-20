@@ -9,7 +9,8 @@
       "Bash(node -e \"const {GoogleGenerativeAI, GoogleGenerativeAIFetchError} = require\\('@google/generative-ai'\\); console.log\\('FetchError:', !!GoogleGenerativeAIFetchError\\)\")",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jeffe\\marketplace-apuntes\\app\\api"
