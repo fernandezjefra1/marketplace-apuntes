@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(npm install *)",
+      "Bash(mkdir -p \"app/api/analizar-apunte\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\jeffe\\marketplace-apuntes\\app\\api"
+    ]
+  }
+}
