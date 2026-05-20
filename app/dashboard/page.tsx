@@ -10,345 +10,315 @@ const CARRERAS = [
 const CICLOS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null)
-  const [apuntes, setApuntes] = useState<any[]>([])
-  const [busqueda, setBusqueda] = useState('')
+  const [user, setUser]               = useState<any>(null)
+  const [apuntes, setApuntes]         = useState<any[]>([])
+  const [busqueda, setBusqueda]       = useState('')
   const [carreraFiltro, setCarreraFiltro] = useState('')
   const [cicloFiltro, setCicloFiltro] = useState('')
   const [precioFiltro, setPrecioFiltro] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [mounted, setMounted] = useState(false)
+  const [loading, setLoading]         = useState(true)
+  const [mounted, setMounted]         = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    const getUser = async () => {
-      const { data } = await supabase.auth.getUser()
+    supabase.auth.getUser().then(({ data }) => {
       if (!data.user) { window.location.href = '/'; return }
       setUser(data.user)
       cargarApuntes()
-    }
-    getUser()
+    })
   }, [])
 
   const cargarApuntes = async () => {
-    const { data } = await supabase
-      .from('apuntes')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const { data } = await supabase.from('apuntes').select('*').order('created_at', { ascending: false })
     setApuntes(data || [])
     setLoading(false)
   }
 
-  const cerrarSesion = async () => {
-    await supabase.auth.signOut()
-    window.location.href = '/'
-  }
+  const cerrarSesion = async () => { await supabase.auth.signOut(); window.location.href = '/' }
 
   const apuntesFiltrados = apuntes.filter(a => {
-    const coincideBusqueda =
-      a.titulo?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      a.descripcion?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      a.curso?.toLowerCase().includes(busqueda.toLowerCase())
-    const coincideCarrera = carreraFiltro ? a.carrera === carreraFiltro : true
-    const coincideCiclo = cicloFiltro ? a.ciclo === cicloFiltro : true
-    const coincidePrecio = precioFiltro === 'gratis' ? (!a.precio || a.precio === 0) :
-      precioFiltro === 'pago' ? a.precio > 0 : true
+    const q = busqueda.toLowerCase()
+    const coincideBusqueda = !q || a.titulo?.toLowerCase().includes(q) || a.descripcion?.toLowerCase().includes(q) || a.curso?.toLowerCase().includes(q)
+    const coincideCarrera  = carreraFiltro ? a.carrera === carreraFiltro : true
+    const coincideCiclo    = cicloFiltro   ? a.ciclo === cicloFiltro     : true
+    const coincidePrecio   = precioFiltro === 'gratis' ? (!a.precio || a.precio === 0) : precioFiltro === 'pago' ? a.precio > 0 : true
     return coincideBusqueda && coincideCarrera && coincideCiclo && coincidePrecio
   })
 
-  const limpiarFiltros = () => {
-    setBusqueda('')
-    setCarreraFiltro('')
-    setCicloFiltro('')
-    setPrecioFiltro('')
-  }
-
+  const limpiarFiltros = () => { setBusqueda(''); setCarreraFiltro(''); setCicloFiltro(''); setPrecioFiltro('') }
   const hayFiltros = busqueda || carreraFiltro || cicloFiltro || precioFiltro
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F8F9FA' }}>
+    <>
+      <style>{`
+        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .card-hover { transition: all .25s ease; }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,.1) !important; }
+        .radio-dot:hover { border-color: #EA580C !important; }
+      `}</style>
 
-      {/* Navbar */}
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer"
-            onClick={() => window.location.href = '/dashboard'}>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
-              style={{ backgroundColor: '#EA580C' }}>A</div>
-            <span className="font-bold text-gray-800">ApuntesUA</span>
-          </div>
+      <div className="min-h-screen" style={{ background: 'linear-gradient(160deg,#FFF7ED 0%,#FFFBF5 20%,#F9FAFB 50%)' }}>
 
-          {/* Buscador central */}
-          <div className="flex-1 max-w-md mx-6">
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-              <input
-                type="text"
-                placeholder="Buscar apuntes..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full border border-gray-200 rounded-full pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-orange-300 bg-gray-50"
-              />
+        {/* ── NAVBAR ── */}
+        <nav className="sticky top-0 z-50 border-b border-orange-100/60"
+          style={{ backgroundColor: 'rgba(255,251,245,.88)', backdropFilter: 'blur(16px)' }}>
+          <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+
+            <div className="flex items-center gap-2.5 cursor-pointer flex-shrink-0"
+              onClick={() => window.location.href = '/dashboard'}>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-black"
+                style={{ background: 'linear-gradient(135deg,#C2410C,#EA580C,#F97316)' }}>A</div>
+              <span className="font-black text-gray-800 hidden sm:block">ApuntesUA</span>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 hidden md:block">{user?.email}</span>
-            <button onClick={() => window.location.href = '/mis-apuntes'}
-              className="text-sm text-gray-500 hover:text-gray-700 transition font-medium">
-              Mis apuntes
-            </button>
-            {user?.email === 'fernandezjefra1@autonomoma.edu.pe' && (
-              <button onClick={() => window.location.href = '/admin'}
-                className="text-xs font-bold px-3 py-1 rounded-lg text-white"
-                style={{ backgroundColor: '#EA580C' }}>
-                Admin
+            {/* Buscador */}
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                <input type="text" placeholder="Buscar apuntes, cursos, carreras..."
+                  value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                  className="w-full rounded-2xl pl-10 pr-4 py-2.5 text-sm border border-gray-200 bg-white focus:outline-none transition"
+                  style={{ boxShadow: '0 2px 8px rgba(0,0,0,.04)' }}
+                  onFocus={e => { e.target.style.borderColor = '#EA580C'; e.target.style.boxShadow = '0 0 0 3px rgba(234,88,12,.1)' }}
+                  onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,.04)' }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-xs text-gray-400 hidden lg:block">{user?.email}</span>
+              <button onClick={() => window.location.href = '/mis-apuntes'}
+                className="text-sm font-semibold text-gray-500 hover:text-gray-800 transition px-3 py-2 rounded-xl hover:bg-gray-100">
+                Mis apuntes
               </button>
-            )}
-            <button onClick={() => window.location.href = '/subir'}
-              className="text-white text-sm px-4 py-2 rounded-xl font-semibold hover:opacity-90 transition"
-              style={{ backgroundColor: '#EA580C' }}>
-              + Subir
-            </button>
-            <button onClick={cerrarSesion}
-              className="text-sm text-gray-400 hover:text-red-400 transition">
-              Salir
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      <div className="max-w-7xl mx-auto flex">
-
-        {/* Sidebar izquierdo — Filtros */}
-        <aside className="w-72 min-h-screen border-r border-gray-100 bg-white p-6 sticky top-14 self-start">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-bold text-gray-800 text-lg">Filtros</h2>
-            {hayFiltros && (
-              <button onClick={limpiarFiltros}
-                className="text-xs font-semibold hover:underline"
-                style={{ color: '#EA580C' }}>
-                Limpiar todo
-              </button>
-            )}
-          </div>
-
-          {/* Precio */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 text-sm mb-3">Precio</h3>
-            <div className="space-y-2">
-              {[
-                { value: '', label: 'Todos' },
-                { value: 'gratis', label: 'Gratis' },
-                { value: 'pago', label: 'De pago' },
-              ].map(op => (
-                <label key={op.value} className="flex items-center gap-3 cursor-pointer group">
-                  <div
-                    className="w-4 h-4 rounded-full border-2 flex items-center justify-center transition"
-                    style={{
-                      borderColor: precioFiltro === op.value ? '#EA580C' : '#D1D5DB',
-                      backgroundColor: precioFiltro === op.value ? '#EA580C' : 'white'
-                    }}
-                    onClick={() => setPrecioFiltro(op.value)}
-                  >
-                    {precioFiltro === op.value && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
-                    )}
-                  </div>
-                  <span className="text-sm text-gray-600 group-hover:text-gray-800"
-                    onClick={() => setPrecioFiltro(op.value)}>
-                    {op.label}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 my-4"></div>
-
-          {/* Carrera */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 text-sm mb-3">Carrera</h3>
-            <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center transition"
-                  style={{
-                    borderColor: carreraFiltro === '' ? '#EA580C' : '#D1D5DB',
-                    backgroundColor: carreraFiltro === '' ? '#EA580C' : 'white'
-                  }}
-                  onClick={() => setCarreraFiltro('')}>
-                  {carreraFiltro === '' && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
-                </div>
-                <span className="text-sm text-gray-600" onClick={() => setCarreraFiltro('')}>Todas</span>
-              </label>
-              {CARRERAS.map(c => (
-                <label key={c} className="flex items-center gap-3 cursor-pointer group">
-                  <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center transition"
-                    style={{
-                      borderColor: carreraFiltro === c ? '#EA580C' : '#D1D5DB',
-                      backgroundColor: carreraFiltro === c ? '#EA580C' : 'white'
-                    }}
-                    onClick={() => setCarreraFiltro(c)}>
-                    {carreraFiltro === c && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
-                  </div>
-                  <span className="text-sm text-gray-600 group-hover:text-gray-800"
-                    onClick={() => setCarreraFiltro(c)}>
-                    {c}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 my-4"></div>
-
-          {/* Ciclo */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 text-sm mb-3">Ciclo</h3>
-            <div className="grid grid-cols-5 gap-2">
-              <button
-                onClick={() => setCicloFiltro('')}
-                className="py-1 rounded-lg text-xs font-semibold transition"
-                style={cicloFiltro === ''
-                  ? { backgroundColor: '#EA580C', color: 'white' }
-                  : { backgroundColor: '#F3F4F6', color: '#6B7280' }}>
-                Todos
-              </button>
-              {CICLOS.map(c => (
-                <button key={c}
-                  onClick={() => setCicloFiltro(c)}
-                  className="py-1 rounded-lg text-xs font-semibold transition"
-                  style={cicloFiltro === c
-                    ? { backgroundColor: '#EA580C', color: 'white' }
-                    : { backgroundColor: '#F3F4F6', color: '#6B7280' }}>
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 my-4"></div>
-
-          {/* Stats */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Total apuntes</span>
-              <span className="font-bold text-gray-800">{apuntes.length}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Gratis</span>
-              <span className="font-bold text-green-600">{apuntes.filter(a => !a.precio || a.precio === 0).length}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">De pago</span>
-              <span className="font-bold text-blue-600">{apuntes.filter(a => a.precio > 0).length}</span>
-            </div>
-          </div>
-        </aside>
-
-        {/* Contenido principal */}
-        <main className="flex-1 p-6">
-
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="font-bold text-gray-800 text-lg">
-                {carreraFiltro || 'Todos los apuntes'}
-              </h2>
-              <p className="text-sm text-gray-400">
-                {apuntesFiltrados.length} resultado{apuntesFiltrados.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map(i => (
-                <div key={i} className="bg-white rounded-2xl p-5 animate-pulse">
-                  <div className="h-3 bg-gray-100 rounded mb-3 w-1/2"></div>
-                  <div className="h-5 bg-gray-100 rounded mb-2"></div>
-                  <div className="h-3 bg-gray-100 rounded w-2/3"></div>
-                </div>
-              ))}
-            </div>
-          ) : apuntesFiltrados.length === 0 ? (
-            <div className="text-center py-20">
-              <p className="text-6xl mb-4">📭</p>
-              <p className="text-gray-600 font-semibold text-lg">No hay apuntes</p>
-              <p className="text-gray-400 text-sm mt-1 mb-6">
-                {hayFiltros ? 'Prueba con otros filtros' : 'Se el primero en subir uno'}
-              </p>
-              {hayFiltros ? (
-                <button onClick={limpiarFiltros}
-                  className="text-white px-6 py-2 rounded-xl text-sm font-semibold"
-                  style={{ backgroundColor: '#EA580C' }}>
-                  Limpiar filtros
-                </button>
-              ) : (
-                <button onClick={() => window.location.href = '/subir'}
-                  className="text-white px-6 py-2 rounded-xl text-sm font-semibold"
-                  style={{ backgroundColor: '#EA580C' }}>
-                  Subir apunte
+              {user?.email === 'fernandezjefra1@autonomoma.edu.pe' && (
+                <button onClick={() => window.location.href = '/admin'}
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl text-white"
+                  style={{ background: 'linear-gradient(135deg,#7C3AED,#8B5CF6)' }}>
+                  Admin
                 </button>
               )}
+              <button onClick={() => window.location.href = '/subir'}
+                className="text-white text-sm px-4 py-2.5 rounded-xl font-bold hover:opacity-90 transition-all hover:shadow-lg"
+                style={{ background: 'linear-gradient(135deg,#EA580C,#F97316)', boxShadow: '0 4px 14px rgba(234,88,12,.3)' }}>
+                + Subir
+              </button>
+              <button onClick={cerrarSesion}
+                className="text-sm text-gray-400 hover:text-red-500 transition px-2 py-2 rounded-xl hover:bg-red-50">
+                Salir
+              </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {apuntesFiltrados.map((apunte, index) => (
-                <div
-                  key={apunte.id}
-                  className="bg-white rounded-2xl p-5 hover:shadow-md cursor-pointer group transition-all"
-                  style={{
-                    opacity: mounted ? 1 : 0,
-                    transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-                    transition: `all 0.4s ease ${index * 0.05}s`,
-                  }}
-                  onClick={() => window.location.href = `/apunte/${apunte.id}`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <span className="text-xs font-bold px-2 py-1 rounded-lg text-white"
-                      style={{ backgroundColor: '#EA580C' }}>
-                      {apunte.carrera || 'General'}
-                    </span>
-                    <span className="text-xs font-bold px-2 py-1 rounded-lg text-white"
-                      style={{ backgroundColor: apunte.precio > 0 ? '#3B82F6' : '#16A34A' }}>
-                      {apunte.precio > 0 ? `S/. ${apunte.precio}` : 'Gratis'}
-                    </span>
-                  </div>
+          </div>
+        </nav>
 
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
-                    style={{ backgroundColor: '#FFF7ED' }}>
-                    <span className="text-lg">📄</span>
-                  </div>
+        <div className="max-w-7xl mx-auto flex">
 
-                  <h3 className="font-bold text-gray-800 mb-1 text-sm group-hover:text-orange-600 transition-colors line-clamp-2">
-                    {apunte.titulo}
-                  </h3>
-                  {apunte.curso && (
-                    <p className="text-xs font-semibold mb-2" style={{ color: '#EA580C' }}>
-                      {apunte.curso}
-                    </p>
-                  )}
-                  {apunte.ciclo && (
-                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg">
-                      Ciclo {apunte.ciclo}
-                    </span>
-                  )}
+          {/* ── SIDEBAR ── */}
+          <aside className="w-64 min-h-screen p-5 sticky top-14 self-start flex-shrink-0">
+            <div className="bg-white rounded-3xl border border-gray-100 p-5"
+              style={{ boxShadow: '0 4px 24px rgba(0,0,0,.05)' }}>
 
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-                    <span className="text-xs text-gray-400">
-                      {new Date(apunte.created_at).toLocaleDateString('es-PE')}
-                    </span>
-                    <span className="text-xs font-semibold group-hover:underline"
-                      style={{ color: '#EA580C' }}>
-                      Ver →
-                    </span>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-black text-gray-800">Filtros</h2>
+                {hayFiltros && (
+                  <button onClick={limpiarFiltros}
+                    className="text-xs font-bold hover:underline" style={{ color: '#EA580C' }}>
+                    Limpiar
+                  </button>
+                )}
+              </div>
+
+              {/* Precio */}
+              <div className="mb-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Precio</p>
+                {[{ value: '', label: 'Todos', icon: '🔘' }, { value: 'gratis', label: 'Gratis', icon: '🆓' }, { value: 'pago', label: 'De pago', icon: '💰' }].map(op => (
+                  <label key={op.value} className="flex items-center gap-3 py-1.5 cursor-pointer group" onClick={() => setPrecioFiltro(op.value)}>
+                    <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0"
+                      style={{ borderColor: precioFiltro === op.value ? '#EA580C' : '#D1D5DB', backgroundColor: precioFiltro === op.value ? '#EA580C' : 'white' }}>
+                      {precioFiltro === op.value && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <span className="text-sm text-gray-600 group-hover:text-gray-900 transition">{op.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="h-px bg-gray-100 my-4" />
+
+              {/* Carrera */}
+              <div className="mb-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Carrera</p>
+                <label className="flex items-center gap-3 py-1 cursor-pointer" onClick={() => setCarreraFiltro('')}>
+                  <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0"
+                    style={{ borderColor: carreraFiltro === '' ? '#EA580C' : '#D1D5DB', backgroundColor: carreraFiltro === '' ? '#EA580C' : 'white' }}>
+                    {carreraFiltro === '' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
+                  <span className="text-sm text-gray-600">Todas</span>
+                </label>
+                {CARRERAS.map(c => (
+                  <label key={c} className="flex items-center gap-3 py-1 cursor-pointer group" onClick={() => setCarreraFiltro(c)}>
+                    <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0"
+                      style={{ borderColor: carreraFiltro === c ? '#EA580C' : '#D1D5DB', backgroundColor: carreraFiltro === c ? '#EA580C' : 'white' }}>
+                      {carreraFiltro === c && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <span className="text-sm text-gray-600 group-hover:text-gray-900 transition leading-tight">{c}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="h-px bg-gray-100 my-4" />
+
+              {/* Ciclo */}
+              <div className="mb-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Ciclo</p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <button onClick={() => setCicloFiltro('')}
+                    className="py-1.5 rounded-xl text-xs font-bold transition-all"
+                    style={cicloFiltro === '' ? { background: 'linear-gradient(135deg,#EA580C,#F97316)', color: 'white' } : { backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                    Todos
+                  </button>
+                  {CICLOS.map(c => (
+                    <button key={c} onClick={() => setCicloFiltro(c)}
+                      className="py-1.5 rounded-xl text-xs font-bold transition-all"
+                      style={cicloFiltro === c ? { background: 'linear-gradient(135deg,#EA580C,#F97316)', color: 'white' } : { backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                      {c}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              <div className="h-px bg-gray-100 my-4" />
+
+              {/* Mini stats */}
+              <div className="space-y-2.5">
+                {[
+                  { label: 'Total apuntes', val: apuntes.length, color: '#1F2937' },
+                  { label: 'Gratis', val: apuntes.filter(a => !a.precio || a.precio === 0).length, color: '#15803D' },
+                  { label: 'De pago', val: apuntes.filter(a => a.precio > 0).length, color: '#2563EB' },
+                ].map(s => (
+                  <div key={s.label} className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">{s.label}</span>
+                    <span className="text-sm font-black" style={{ color: s.color }}>{s.val}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-        </main>
+          </aside>
+
+          {/* ── MAIN ── */}
+          <main className="flex-1 p-6 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="font-black text-gray-800 text-xl">
+                  {carreraFiltro || 'Todos los apuntes'}
+                </h2>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  {apuntesFiltrados.length} resultado{apuntesFiltrados.length !== 1 ? 's' : ''}
+                  {hayFiltros && ' · filtrado'}
+                </p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array(6).fill(0).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100" style={{ boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
+                    <div className="flex justify-between mb-3">
+                      <div className="h-5 w-20 rounded-lg bg-gray-100 animate-pulse" />
+                      <div className="h-5 w-14 rounded-lg bg-gray-100 animate-pulse" />
+                    </div>
+                    <div className="h-10 w-10 rounded-xl bg-gray-100 animate-pulse mb-3" />
+                    <div className="h-4 bg-gray-100 rounded animate-pulse mb-2" />
+                    <div className="h-3 bg-gray-100 rounded animate-pulse w-2/3" />
+                  </div>
+                ))}
+              </div>
+            ) : apuntesFiltrados.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-5"
+                  style={{ backgroundColor: '#FFF7ED' }}>📭</div>
+                <p className="font-black text-gray-800 text-xl mb-2">No hay apuntes</p>
+                <p className="text-gray-400 text-sm mb-6">
+                  {hayFiltros ? 'Prueba con otros filtros' : 'Sé el primero en subir uno'}
+                </p>
+                {hayFiltros ? (
+                  <button onClick={limpiarFiltros}
+                    className="text-white px-6 py-2.5 rounded-2xl text-sm font-bold hover:opacity-90 transition"
+                    style={{ background: 'linear-gradient(135deg,#EA580C,#F97316)' }}>
+                    Limpiar filtros
+                  </button>
+                ) : (
+                  <button onClick={() => window.location.href = '/subir'}
+                    className="text-white px-6 py-2.5 rounded-2xl text-sm font-bold hover:opacity-90 transition"
+                    style={{ background: 'linear-gradient(135deg,#EA580C,#F97316)' }}>
+                    Subir apunte
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {apuntesFiltrados.map((apunte, index) => (
+                  <div key={apunte.id} className="card-hover bg-white rounded-2xl p-5 cursor-pointer border border-gray-100 group"
+                    style={{
+                      boxShadow: '0 2px 12px rgba(0,0,0,.05)',
+                      opacity: mounted ? 1 : 0,
+                      animation: mounted ? `fadeUp .4s ease ${index * 0.04}s both` : 'none',
+                    }}
+                    onClick={() => window.location.href = `/apunte/${apunte.id}`}>
+
+                    <div className="flex items-start justify-between mb-3">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-xl text-white"
+                        style={{ background: 'linear-gradient(135deg,#C2410C,#EA580C)' }}>
+                        {apunte.carrera || 'General'}
+                      </span>
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-xl text-white"
+                        style={{ backgroundColor: apunte.precio > 0 ? '#2563EB' : '#15803D' }}>
+                        {apunte.precio > 0 ? `S/. ${apunte.precio}` : 'Gratis'}
+                      </span>
+                    </div>
+
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                      style={{ backgroundColor: '#FFF7ED' }}>
+                      <span className="text-lg">📄</span>
+                    </div>
+
+                    <h3 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-orange-600 transition-colors line-clamp-2 leading-snug">
+                      {apunte.titulo}
+                    </h3>
+                    {apunte.curso && (
+                      <p className="text-xs font-semibold mb-2" style={{ color: '#EA580C' }}>{apunte.curso}</p>
+                    )}
+                    {apunte.ciclo && (
+                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg font-medium">
+                        Ciclo {apunte.ciclo}
+                      </span>
+                    )}
+
+                    {/* Score IA si existe */}
+                    {apunte.score_ia && (
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-lg text-white"
+                          style={{ backgroundColor: apunte.score_ia >= 90 ? '#15803D' : apunte.score_ia >= 75 ? '#2563EB' : '#EA580C' }}>
+                          IA {apunte.score_ia}pts
+                        </span>
+                        {apunte.apto_pack_examen && <span className="text-xs">⭐</span>}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
+                      <span className="text-xs text-gray-400">
+                        {new Date(apunte.created_at).toLocaleDateString('es-PE')}
+                      </span>
+                      <span className="text-xs font-bold group-hover:underline transition" style={{ color: '#EA580C' }}>
+                        Ver →
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
