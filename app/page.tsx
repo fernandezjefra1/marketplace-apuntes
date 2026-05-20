@@ -39,7 +39,10 @@ function MiniCard({ titulo, curso, carrera, precio, color, delay = 0 }: any) {
       style={{ boxShadow: '0 20px 60px rgba(0,0,0,.18)', animationDelay: `${delay}s` }}>
       <div className="flex justify-between items-start mb-3">
         <span className="text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ backgroundColor: color }}>{carrera}</span>
-        <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ backgroundColor: precio === 'Gratis' ? '#DCFCE7', color: '#15803D' }}>{precio}</span>
+        <span className="text-xs font-bold px-2 py-1 rounded-lg"
+          style={{ backgroundColor: precio === 'Gratis' ? '#DCFCE7' : '#DBEAFE', color: precio === 'Gratis' ? '#15803D' : '#1D4ED8' }}>
+          {precio}
+        </span>
       </div>
       <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2" style={{ backgroundColor: '#FFF7ED' }}>
         <span>📄</span>
