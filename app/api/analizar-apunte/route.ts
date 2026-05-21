@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI, GoogleGenerativeAIFetchError } from '@google/generative-ai'
 
-// Permite hasta 60s en Vercel Pro / 10s en Hobby — sin esto Vercel corta a los 10s por defecto
 export const maxDuration = 60
 
 export interface ResultadoAnalisis {
@@ -28,6 +27,9 @@ function calcularBanda(score: number): Pick<ResultadoAnalisis, 'banda_precio' | 
   if (score < 90) return { banda_precio: '5-10',      precio_min: 5, precio_max: 10 }
   return           { banda_precio: '10-15',    precio_min: 10, precio_max: 15 }
 }
+
+// Espera N milisegundos (compatible con edge/serverless)
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const PROMPT_EVALUACION = `Eres un evaluador académico de apuntes universitarios peruanos. Analiza el PDF adjunto y devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.
 
@@ -97,37 +99,70 @@ export async function POST(request: Request) {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
-    const result = await model.generateContent([
-      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
-      { text: PROMPT_EVALUACION },
-    ])
+    // Reintentos con backoff para errores 429 transitorios (límite por minuto)
+    let lastError: GoogleGenerativeAIFetchError | null = null
+    const delays = [4000, 10000] // 4s y 10s entre reintentos
 
-    const text = result.response.text()
+    for (let intento = 0; intento <= delays.length; intento++) {
+      try {
+        const result = await model.generateContent([
+          { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+          { text: PROMPT_EVALUACION },
+        ])
 
-    let resultado: ResultadoAnalisis
-    try {
-      resultado = JSON.parse(text.trim())
-    } catch {
-      const match = text.match(/\{[\s\S]*\}/)
-      if (!match) throw new Error('La respuesta de la IA no contiene JSON válido.')
-      resultado = JSON.parse(match[0])
+        const text = result.response.text()
+
+        let resultado: ResultadoAnalisis
+        try {
+          resultado = JSON.parse(text.trim())
+        } catch {
+          const match = text.match(/\{[\s\S]*\}/)
+          if (!match) throw new Error('La respuesta de la IA no contiene JSON válido.')
+          resultado = JSON.parse(match[0])
+        }
+
+        const bandaCorrecta = calcularBanda(resultado.score_total)
+        resultado.banda_precio     = bandaCorrecta.banda_precio
+        resultado.precio_min       = bandaCorrecta.precio_min
+        resultado.precio_max       = bandaCorrecta.precio_max
+        resultado.apto_pack_examen = resultado.score_total >= 90
+
+        return Response.json(resultado)
+
+      } catch (err) {
+        if (err instanceof GoogleGenerativeAIFetchError && err.status === 429 && intento < delays.length) {
+          lastError = err
+          console.warn(`[analizar-apunte] 429 en intento ${intento + 1}, esperando ${delays[intento]}ms...`)
+          await sleep(delays[intento])
+          continue
+        }
+        throw err
+      }
     }
 
-    const bandaCorrecta = calcularBanda(resultado.score_total)
-    resultado.banda_precio     = bandaCorrecta.banda_precio
-    resultado.precio_min       = bandaCorrecta.precio_min
-    resultado.precio_max       = bandaCorrecta.precio_max
-    resultado.apto_pack_examen = resultado.score_total >= 90
-
-    return Response.json(resultado)
+    // Si llegamos aquí, los 3 intentos fallaron por 429
+    console.error('[analizar-apunte] 429 persistente tras reintentos')
+    return Response.json(
+      {
+        error: 'La API de Gemini tiene el límite de solicitudes alcanzado. ' +
+          'Si este error lleva más de 1 hora, la cuota diaria gratuita (1500 req/día) está agotada — ' +
+          'se restablece automáticamente a medianoche (hora del Pacífico). Intenta mañana o genera una nueva API key en Google AI Studio.',
+      },
+      { status: 429 }
+    )
 
   } catch (error) {
     if (error instanceof GoogleGenerativeAIFetchError) {
-      // Log completo en Vercel Functions log para poder diagnosticar
       console.error(`[analizar-apunte] GoogleGenerativeAIFetchError status=${error.status} message=${error.message}`)
 
       if (error.status === 429) {
-        return Response.json({ error: 'Límite de solicitudes alcanzado. Espera unos segundos e intenta de nuevo.' }, { status: 429 })
+        return Response.json(
+          {
+            error: 'Límite de solicitudes de Gemini alcanzado. Si persiste más de 1 hora, la cuota diaria gratuita se agotó — ' +
+              'se restablece a medianoche. Genera una nueva API key en aistudio.google.com como alternativa.',
+          },
+          { status: 429 }
+        )
       }
       if (error.status === 403) {
         return Response.json({ error: 'La API key de Gemini es inválida o fue revocada. Genera una nueva en Google AI Studio y actualízala en Vercel.' }, { status: 502 })
@@ -138,7 +173,6 @@ export async function POST(request: Request) {
       if (error.status === 413 || error.message?.includes('too large')) {
         return Response.json({ error: 'El PDF es demasiado grande. El límite es 20 MB.' }, { status: 413 })
       }
-      // Cualquier otro error de Gemini — muestra el código para facilitar diagnóstico
       return Response.json(
         { error: `Error de Gemini (${error.status ?? 'sin código'}): ${error.message ?? 'sin detalle'}` },
         { status: 502 }
