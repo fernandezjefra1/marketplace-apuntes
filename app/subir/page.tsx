@@ -17,13 +17,27 @@ const PALABRAS_PROHIBIDAS = [
 const contienePalabraProhibida = (texto: string) =>
   PALABRAS_PROHIBIDAS.some(p => texto.toLowerCase().includes(p))
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
+async function extractPdfText(file: File): Promise<string> {
+  const pdfjsLib = await import('pdfjs-dist')
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+
+  const pages = Math.min(pdf.numPages, 30)
+  const partes: string[] = []
+
+  for (let i = 1; i <= pages; i++) {
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+    const texto = content.items
+      .map((item: any) => ('str' in item ? item.str : ''))
+      .join(' ')
+    if (texto.trim()) partes.push(texto)
+  }
+
+  return partes.join('\n\n')
 }
 
 function scoreConfig(score: number) {
@@ -111,11 +125,16 @@ export default function SubirApunte() {
     if (!file) return
     setAnalizando(true)
     try {
-      const pdfBase64 = await fileToBase64(file)
+      const pdfText = await extractPdfText(file)
+      if (!pdfText || pdfText.trim().length < 20) {
+        setErrorAnalisis('No se pudo extraer texto del PDF. Asegúrate de que el PDF contenga texto (no sea una imagen escaneada).')
+        setAnalizando(false)
+        return
+      }
       const res = await fetch('/api/analizar-apunte', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfBase64 }),
+        body: JSON.stringify({ pdfText }),
       })
       const data = await res.json()
       if (!res.ok) { setErrorAnalisis(data.error || 'Error al analizar.'); setAnalizando(false); return }
