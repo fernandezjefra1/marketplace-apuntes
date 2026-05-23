@@ -84,6 +84,8 @@ export default function SubirApunte() {
   const [analizando, setAnalizando]   = useState(false)
   const [analisis, setAnalisis]       = useState<ResultadoAnalisis | null>(null)
   const [errorAnalisis, setErrorAnalisis] = useState('')
+  const [modoManual, setModoManual]   = useState(false)
+  const [bandaManual, setBandaManual] = useState<'gratis' | '2-5' | '5-10' | '10-15' | ''>('')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -95,10 +97,17 @@ export default function SubirApunte() {
   // Current step (visual only)
   const paso = !archivo ? 1 : analizando ? 2 : !analisis ? 2 : analisis.banda_precio === 'rechazado' ? 3 : 3
 
+  const activarModoManual = () => {
+    setModoManual(true)
+    setErrorAnalisis('')
+  }
+
   const handleArchivoChange = async (file: File | null) => {
     setArchivo(file)
     setAnalisis(null)
     setErrorAnalisis('')
+    setModoManual(false)
+    setBandaManual('')
     if (!file) return
     setAnalizando(true)
     try {
@@ -132,6 +141,36 @@ export default function SubirApunte() {
     }
     if (!titulo || !carrera || !ciclo || !curso) { setError('Completa todos los campos obligatorios.'); return }
     if (!archivo)  { setError('Selecciona un archivo PDF.'); return }
+
+    // Modo manual: validar que se eligió una banda
+    if (modoManual) {
+      if (!bandaManual) { setError('Selecciona un rango de precio para continuar.'); return }
+      const precioManualNum = parseFloat(precio)
+      const rangoMin = bandaManual === 'gratis' ? 0 : bandaManual === '2-5' ? 2 : bandaManual === '5-10' ? 5 : 10
+      const rangoMax = bandaManual === 'gratis' ? 0 : bandaManual === '2-5' ? 5 : bandaManual === '5-10' ? 10 : 15
+      if (bandaManual !== 'gratis' && (precioManualNum < rangoMin || precioManualNum > rangoMax)) {
+        setError(`El precio debe estar entre S/. ${rangoMin} y S/. ${rangoMax}.`); return
+      }
+      setLoading(true); setError('')
+      try {
+        const nombreArchivo = `${user.id}-${Date.now()}.pdf`
+        const { error: eStorage } = await supabase.storage.from('apuntes').upload(nombreArchivo, archivo)
+        if (eStorage) throw eStorage
+        const { data: urlData } = supabase.storage.from('apuntes').getPublicUrl(nombreArchivo)
+        const { error: eDB } = await supabase.from('apuntes').insert({
+          titulo, descripcion, curso, carrera, ciclo,
+          precio: bandaManual === 'gratis' ? 0 : precioManualNum,
+          archivo_url: urlData.publicUrl,
+          usuario_id: user.id,
+          banda_precio: bandaManual,
+        })
+        if (eDB) throw eDB
+        setExito(true)
+      } catch { setError('Error al subir el apunte. Intenta de nuevo.') }
+      setLoading(false)
+      return
+    }
+
     if (!analisis) { setError('Espera a que termine el análisis.'); return }
     if (analisis.banda_precio === 'rechazado') { setError('El apunte no cumple los requisitos mínimos.'); return }
     const precioNum = parseFloat(precio)
@@ -188,7 +227,10 @@ export default function SubirApunte() {
   )
 
   const cfg = analisis ? scoreConfig(analisis.score_total) : null
-  const puedePublicar = !analizando && !!analisis && analisis.banda_precio !== 'rechazado' && !loading
+  const puedePublicar = !analizando && !loading && (
+    (!!analisis && analisis.banda_precio !== 'rechazado') ||
+    (modoManual && !!bandaManual)
+  )
 
   return (
     <>
@@ -462,13 +504,34 @@ export default function SubirApunte() {
 
                   {/* ERROR ANÁLISIS */}
                   {errorAnalisis && !analizando && (
-                    <div className="fade-up bg-red-50 border border-red-100 rounded-2xl p-5">
-                      <p className="font-bold text-red-700 text-sm mb-1">No se pudo analizar el PDF</p>
-                      <p className="text-red-500 text-sm">{errorAnalisis}</p>
-                      <button className="mt-3 text-xs font-semibold text-red-600 underline"
-                        onClick={() => archivo && handleArchivoChange(archivo)}>
-                        Reintentar análisis
-                      </button>
+                    <div className="fade-up">
+                      <div className="bg-red-50 border border-red-100 rounded-2xl p-5 mb-3">
+                        <p className="font-bold text-red-700 text-sm mb-1">No se pudo analizar el PDF</p>
+                        <p className="text-red-500 text-sm">{errorAnalisis}</p>
+                        <button className="mt-3 text-xs font-semibold text-red-600 underline"
+                          onClick={() => archivo && handleArchivoChange(archivo)}>
+                          Reintentar análisis
+                        </button>
+                      </div>
+                      {/* Opción alternativa */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl flex-shrink-0">⚡</span>
+                          <div>
+                            <p className="font-bold text-amber-800 text-sm mb-1">Publicar sin análisis IA</p>
+                            <p className="text-amber-700 text-xs leading-relaxed mb-3">
+                              El servicio de IA no está disponible ahora. Puedes publicar tu apunte manualmente eligiendo el precio tú mismo.
+                              El análisis IA se podrá hacer más tarde.
+                            </p>
+                            <button
+                              onClick={activarModoManual}
+                              className="text-xs font-bold px-4 py-2 rounded-xl text-white transition hover:opacity-90"
+                              style={{ background: 'linear-gradient(135deg,#D97706,#F59E0B)' }}>
+                              Continuar sin IA →
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -575,7 +638,73 @@ export default function SubirApunte() {
               </>
             )}
 
-            {/* ── SECCIÓN 4: PRECIO ── */}
+            {/* ── SECCIÓN 4 MANUAL: PRECIO SIN IA ── */}
+            {modoManual && !analizando && (
+              <>
+                <div className="h-px mx-8" style={{ backgroundColor: '#F3F4F6' }} />
+                <div className="px-8 py-6">
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-black flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#D97706,#F59E0B)' }}>3</div>
+                    <div>
+                      <h3 className="font-bold text-gray-800 text-base leading-none">Precio manual</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">Sin análisis IA — tú eliges el rango</p>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-4">Elige el rango de precio que mejor refleja la calidad de tu apunte:</p>
+
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    {[
+                      { val: 'gratis' as const, label: 'Gratis', sub: 'Acceso libre', icon: '🆓', color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' },
+                      { val: '2-5' as const,    label: 'S/. 2 – 5',   sub: 'Apunte básico', icon: '📄', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+                      { val: '5-10' as const,   label: 'S/. 5 – 10',  sub: 'Buen contenido', icon: '📚', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+                      { val: '10-15' as const,  label: 'S/. 10 – 15', sub: 'Excelente apunte', icon: '⭐', color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },
+                    ].map(op => (
+                      <button key={op.val} onClick={() => {
+                        setBandaManual(op.val)
+                        setPrecio(op.val === 'gratis' ? '0' : op.val === '2-5' ? '2' : op.val === '5-10' ? '5' : '10')
+                      }}
+                        className="p-4 rounded-2xl border-2 text-left transition-all"
+                        style={{
+                          borderColor: bandaManual === op.val ? op.color : op.border,
+                          backgroundColor: bandaManual === op.val ? op.bg : 'white',
+                          boxShadow: bandaManual === op.val ? `0 0 0 3px ${op.color}20` : 'none',
+                        }}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{op.icon}</span>
+                          <span className="font-black text-sm" style={{ color: op.color }}>{op.label}</span>
+                        </div>
+                        <p className="text-xs text-gray-400">{op.sub}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {bandaManual && bandaManual !== 'gratis' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Precio exacto (S/.)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">S/.</span>
+                        <input
+                          className="input-base"
+                          style={{ paddingLeft: 40 }}
+                          type="number"
+                          value={precio}
+                          onChange={e => setPrecio(e.target.value)}
+                          min={bandaManual === '2-5' ? 2 : bandaManual === '5-10' ? 5 : 10}
+                          max={bandaManual === '2-5' ? 5 : bandaManual === '5-10' ? 10 : 15}
+                          step="0.5"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── SECCIÓN 4: PRECIO CON IA ── */}
             {analisis && !analizando && analisis.banda_precio !== 'rechazado' && (
               <>
                 <div className="h-px mx-8" style={{ backgroundColor: '#F3F4F6' }} />
@@ -651,6 +780,8 @@ export default function SubirApunte() {
                     Publicando...
                   </span>
                 ) : analizando ? 'Analizando tu PDF...'
+                  : modoManual && !bandaManual ? 'Elige un rango de precio'
+                  : modoManual ? 'Publicar apunte →'
                   : !analisis ? 'Sube un PDF para continuar'
                   : analisis.banda_precio === 'rechazado' ? 'Apunte no apto para publicar'
                   : 'Publicar apunte →'}
