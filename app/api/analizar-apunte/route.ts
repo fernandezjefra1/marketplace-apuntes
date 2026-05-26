@@ -75,17 +75,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    let body: { pdfText?: unknown }
+    let body: { pdfText?: unknown; titulo?: unknown; curso?: unknown; carrera?: unknown; ciclo?: unknown }
     try {
       body = await request.json()
     } catch {
       return Response.json({ error: 'Cuerpo de solicitud inválido.' }, { status: 400 })
     }
 
-    const { pdfText } = body
-    if (!pdfText || typeof pdfText !== 'string' || pdfText.trim().length < 20) {
+    const { pdfText, titulo, curso, carrera, ciclo } = body
+    const textoExtraido = typeof pdfText === 'string' ? pdfText.trim() : ''
+
+    if (textoExtraido.length < 100) {
       return Response.json(
-        { error: 'No se pudo extraer texto del PDF. Asegúrate de que el PDF contenga texto seleccionable (no sea una imagen escaneada).' },
+        {
+          error: `No se pudo extraer suficiente texto del PDF (solo ${textoExtraido.length} caracteres). El PDF parece ser una imagen escaneada. Usa un PDF con texto seleccionable para obtener análisis preciso.`,
+          caracteresExtraidos: textoExtraido.length,
+        },
         { status: 400 }
       )
     }
@@ -93,14 +98,21 @@ export async function POST(request: Request) {
     const groq = new Groq({ apiKey })
 
     // Limitar a 14,000 caracteres para no exceder el contexto del modelo
-    const textoLimitado = pdfText.slice(0, 14000)
+    const textoLimitado = textoExtraido.slice(0, 14000)
+
+    const metadatos = [
+      titulo  ? `Título: ${titulo}`   : null,
+      curso   ? `Curso: ${curso}`     : null,
+      carrera ? `Carrera: ${carrera}` : null,
+      ciclo   ? `Ciclo: ${ciclo}`     : null,
+    ].filter(Boolean).join('\n')
 
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'user',
-          content: `${PROMPT_EVALUACION}\n\n--- CONTENIDO DEL APUNTE ---\n${textoLimitado}`,
+          content: `${PROMPT_EVALUACION}\n\n--- METADATOS DEL APUNTE ---\n${metadatos}\n\n--- CONTENIDO DEL APUNTE (${textoLimitado.length} caracteres extraídos) ---\n${textoLimitado}`,
         },
       ],
       response_format: { type: 'json_object' },

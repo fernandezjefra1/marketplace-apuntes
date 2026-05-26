@@ -126,15 +126,17 @@ export default function SubirApunte() {
     setAnalizando(true)
     try {
       const pdfText = await extractPdfText(file)
-      if (!pdfText || pdfText.trim().length < 20) {
-        setErrorAnalisis('No se pudo extraer texto del PDF. Asegúrate de que el PDF contenga texto (no sea una imagen escaneada).')
+      const chars = pdfText.trim().length
+      console.log(`[PDF extracción] ${chars} caracteres extraídos de "${file.name}"`)
+      if (chars < 100) {
+        setErrorAnalisis(`Solo se pudieron extraer ${chars} caracteres del PDF. El PDF parece ser una imagen escaneada sin texto seleccionable. Convierte el PDF a texto o usa otro archivo.`)
         setAnalizando(false)
         return
       }
       const res = await fetch('/api/analizar-apunte', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfText }),
+        body: JSON.stringify({ pdfText, titulo, curso, carrera, ciclo }),
       })
       const data = await res.json()
       if (!res.ok) { setErrorAnalisis(data.error || 'Error al analizar.'); setAnalizando(false); return }
