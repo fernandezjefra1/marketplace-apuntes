@@ -140,17 +140,17 @@ export async function POST(request: Request) {
 
     return Response.json(resultado)
 
-  } catch (error: any) {
-    console.error('[analizar-apunte] Error:', error?.message ?? error)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[analizar-apunte] Error:', message)
 
-    // Errores de rate limit de Groq
-    if (error?.status === 429) {
+    if (error instanceof Groq.RateLimitError) {
       return Response.json(
         { error: 'Límite de solicitudes de Groq alcanzado. Espera unos segundos e intenta de nuevo.' },
         { status: 429 }
       )
     }
-    if (error?.status === 401) {
+    if (error instanceof Groq.AuthenticationError) {
       return Response.json(
         { error: 'API key de Groq inválida. Verifica la variable GROQ_API_KEY en Vercel.' },
         { status: 502 }
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     }
 
     return Response.json(
-      { error: `Error al analizar: ${error instanceof Error ? error.message : String(error)}` },
+      { error: `Error al analizar: ${message}` },
       { status: 500 }
     )
   }
