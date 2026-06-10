@@ -79,8 +79,6 @@ function BarraCriterio({ label, valor, max, delay = 0 }: { label: string; valor:
   )
 }
 
-const STEPS = ['Información', 'Archivo PDF', 'Análisis IA', 'Precio y publicar']
-
 export default function SubirApunte() {
   const [user, setUser] = useState<any>(null)
   const [titulo, setTitulo]       = useState('')
@@ -95,11 +93,26 @@ export default function SubirApunte() {
   const [exito, setExito]         = useState(false)
   const [drag, setDrag]           = useState(false)
 
+  const [modoPublicacion, setModoPublicacion] = useState<'ia' | 'gratis'>('ia')
   const [analizando, setAnalizando]   = useState(false)
   const [analisis, setAnalisis]       = useState<ResultadoAnalisis | null>(null)
   const [errorAnalisis, setErrorAnalisis] = useState('')
   const [modoManual, setModoManual]   = useState(false)
   const [bandaManual, setBandaManual] = useState<'gratis' | '2-5' | '5-10' | '10-15' | ''>('')
+
+  const STEPS = modoPublicacion === 'gratis'
+    ? ['Información', 'Modo de publicación', 'Archivo PDF', 'Publicar']
+    : ['Información', 'Modo de publicación', 'Análisis IA', 'Precio y publicar']
+
+  const cambiarModo = (modo: 'ia' | 'gratis') => {
+    setModoPublicacion(modo)
+    setArchivo(null)
+    setAnalisis(null)
+    setErrorAnalisis('')
+    setModoManual(false)
+    setBandaManual('')
+    setPrecio('0')
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -108,8 +121,10 @@ export default function SubirApunte() {
     })
   }, [])
 
-  // Current step (visual only)
-  const paso = !archivo ? 1 : analizando ? 2 : !analisis ? 2 : analisis.banda_precio === 'rechazado' ? 3 : 3
+  // Step indicator
+  const paso = modoPublicacion === 'gratis'
+    ? !archivo ? 1 : 3
+    : !archivo ? 1 : analizando ? 2 : !analisis ? 2 : 3
 
   const activarModoManual = () => {
     setModoManual(true)
@@ -123,6 +138,8 @@ export default function SubirApunte() {
     setModoManual(false)
     setBandaManual('')
     if (!file) return
+    // Si el modo es gratis, no hay análisis IA
+    if (modoPublicacion === 'gratis') return
     setAnalizando(true)
     try {
       const pdfText = await extractPdfText(file)
@@ -162,6 +179,28 @@ export default function SubirApunte() {
     }
     if (!titulo || !carrera || !ciclo || !curso) { setError('Completa todos los campos obligatorios.'); return }
     if (!archivo)  { setError('Selecciona un archivo PDF.'); return }
+
+    // Modo publicar gratis directo (sin análisis IA)
+    if (modoPublicacion === 'gratis') {
+      setLoading(true); setError('')
+      try {
+        const nombreArchivo = `${user.id}-${Date.now()}.pdf`
+        const { error: eStorage } = await supabase.storage.from('apuntes').upload(nombreArchivo, archivo)
+        if (eStorage) throw eStorage
+        const { data: urlData } = supabase.storage.from('apuntes').getPublicUrl(nombreArchivo)
+        const { error: eDB } = await supabase.from('apuntes').insert({
+          titulo, descripcion, curso, carrera, ciclo,
+          precio: 0,
+          archivo_url: urlData.publicUrl,
+          usuario_id: user.id,
+          banda_precio: 'gratis',
+        })
+        if (eDB) throw eDB
+        setExito(true)
+      } catch { setError('Error al subir el apunte. Intenta de nuevo.') }
+      setLoading(false)
+      return
+    }
 
     // Modo manual: validar que se eligió una banda
     if (modoManual) {
@@ -249,7 +288,8 @@ export default function SubirApunte() {
 
   const cfg = analisis ? scoreConfig(analisis.score_total) : null
   const puedePublicar = !analizando && !loading && (
-    (!!analisis && analisis.banda_precio !== 'rechazado') ||
+    (modoPublicacion === 'gratis' && !!archivo) ||
+    (modoPublicacion === 'ia' && !!analisis && analisis.banda_precio !== 'rechazado') ||
     (modoManual && !!bandaManual)
   )
 
@@ -405,12 +445,92 @@ export default function SubirApunte() {
 
             <div className="h-px mx-8" style={{ backgroundColor: '#F3F4F6' }} />
 
-            {/* ── SECCIÓN 2: ARCHIVO PDF ── */}
+            {/* ── SECCIÓN 2: MODO DE PUBLICACIÓN ── */}
+            <div className="px-8 py-6">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-black flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg,#EA580C,#F97316)' }}>2</div>
+                <div>
+                  <h3 className="font-bold text-gray-800 text-base leading-none">¿Cómo quieres publicarlo?</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Elige si quieres cobrar por tu trabajo o regalarlo</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Opción: Con IA */}
+                <button
+                  type="button"
+                  onClick={() => cambiarModo('ia')}
+                  className="relative p-5 rounded-2xl border-2 text-left transition-all duration-200"
+                  style={{
+                    borderColor: modoPublicacion === 'ia' ? '#EA580C' : '#E5E7EB',
+                    backgroundColor: modoPublicacion === 'ia' ? '#FFF7ED' : 'white',
+                    boxShadow: modoPublicacion === 'ia' ? '0 0 0 3px rgba(234,88,12,.12)' : 'none',
+                  }}>
+                  {modoPublicacion === 'ia' && (
+                    <span className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs"
+                      style={{ background: 'linear-gradient(135deg,#EA580C,#F97316)' }}>✓</span>
+                  )}
+                  <div className="text-2xl mb-2">🤖</div>
+                  <p className="font-black text-gray-800 text-sm mb-1">Análisis con IA</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    La IA evalúa tu trabajo, detecta si es tesis, apuntes o práctica, y sugiere un precio justo según la calidad.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {['Precio automático', 'Score de calidad', 'Temas detectados'].map(tag => (
+                      <span key={tag} className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                        style={{ backgroundColor: '#FFF7ED', color: '#EA580C', fontSize: '10px' }}>{tag}</span>
+                    ))}
+                  </div>
+                </button>
+
+                {/* Opción: Gratis */}
+                <button
+                  type="button"
+                  onClick={() => cambiarModo('gratis')}
+                  className="relative p-5 rounded-2xl border-2 text-left transition-all duration-200"
+                  style={{
+                    borderColor: modoPublicacion === 'gratis' ? '#15803D' : '#E5E7EB',
+                    backgroundColor: modoPublicacion === 'gratis' ? '#F0FDF4' : 'white',
+                    boxShadow: modoPublicacion === 'gratis' ? '0 0 0 3px rgba(21,128,61,.12)' : 'none',
+                  }}>
+                  {modoPublicacion === 'gratis' && (
+                    <span className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs"
+                      style={{ backgroundColor: '#15803D' }}>✓</span>
+                  )}
+                  <div className="text-2xl mb-2">🆓</div>
+                  <p className="font-black text-gray-800 text-sm mb-1">Publicar gratis</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Tu trabajo queda disponible sin costo para todos. Sin análisis IA, publicación inmediata.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {['Sin análisis', 'Acceso libre', 'Publicación rápida'].map(tag => (
+                      <span key={tag} className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                        style={{ backgroundColor: '#F0FDF4', color: '#15803D', fontSize: '10px' }}>{tag}</span>
+                    ))}
+                  </div>
+                </button>
+              </div>
+
+              {modoPublicacion === 'gratis' && (
+                <div className="mt-4 flex items-start gap-3 p-4 rounded-2xl"
+                  style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                  <span className="text-lg flex-shrink-0">💡</span>
+                  <p className="text-xs text-green-700 leading-relaxed">
+                    <strong>Libre mercado:</strong> Puedes publicar cualquier trabajo gratis sin restricciones. Si en el futuro quieres cobrar por él, súbelo nuevamente con análisis IA para que el sistema evalúe su precio justo.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="h-px mx-8" style={{ backgroundColor: '#F3F4F6' }} />
+
+            {/* ── SECCIÓN 3: ARCHIVO PDF ── */}
             <div className="px-8 py-6">
               <div className="flex items-center gap-2.5 mb-5">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-sm font-black flex-shrink-0"
                   style={{ background: archivo ? 'linear-gradient(135deg,#15803D,#16A34A)' : 'linear-gradient(135deg,#EA580C,#F97316)' }}>
-                  {archivo ? '✓' : '2'}
+                  {archivo ? '✓' : '3'}
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-800 text-base leading-none">Archivo PDF</h3>
@@ -597,6 +717,30 @@ export default function SubirApunte() {
 
                       {/* Cuerpo */}
                       <div className="p-6 bg-white">
+
+                        {/* Tipo de documento detectado */}
+                        {analisis.tipo_documento && (() => {
+                          const TIPOS: Record<string, { label: string; icon: string; color: string; bg: string }> = {
+                            tesis_investigacion: { label: 'Tesis / Investigación', icon: '🎓', color: '#7C3AED', bg: '#F5F3FF' },
+                            monografia:          { label: 'Monografía',            icon: '📋', color: '#0891B2', bg: '#F0F9FF' },
+                            practicas_resueltas: { label: 'Prácticas resueltas',   icon: '✏️', color: '#D97706', bg: '#FFFBEB' },
+                            guia_estudio:        { label: 'Guía de estudio',       icon: '🗂️', color: '#059669', bg: '#F0FDF4' },
+                            resumen_capitulo:    { label: 'Resumen de capítulo',   icon: '📝', color: '#EA580C', bg: '#FFF7ED' },
+                            apuntes_clase:       { label: 'Apuntes de clase',      icon: '📄', color: '#2563EB', bg: '#EFF6FF' },
+                            otro:                { label: 'Documento académico',   icon: '📁', color: '#6B7280', bg: '#F9FAFB' },
+                          }
+                          const t = TIPOS[analisis.tipo_documento] || TIPOS.otro
+                          return (
+                            <div className="flex items-center gap-3 mb-5 p-3 rounded-xl"
+                              style={{ backgroundColor: t.bg, border: `1px solid ${t.color}25` }}>
+                              <span className="text-xl">{t.icon}</span>
+                              <div>
+                                <p className="text-xs text-gray-400 font-medium">Tipo de documento detectado</p>
+                                <p className="text-sm font-black" style={{ color: t.color }}>{t.label}</p>
+                              </div>
+                            </div>
+                          )
+                        })()}
 
                         {/* Criterios */}
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Criterios de evaluación</p>
@@ -800,7 +944,9 @@ export default function SubirApunte() {
                     <span className="spin-anim inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
                     Publicando...
                   </span>
-                ) : analizando ? 'Analizando tu PDF...'
+                ) : modoPublicacion === 'gratis' && !archivo ? 'Sube un PDF para continuar'
+                  : modoPublicacion === 'gratis' ? '🆓 Publicar gratis →'
+                  : analizando ? 'Analizando tu PDF...'
                   : modoManual && !bandaManual ? 'Elige un rango de precio'
                   : modoManual ? 'Publicar apunte →'
                   : !analisis ? 'Sube un PDF para continuar'

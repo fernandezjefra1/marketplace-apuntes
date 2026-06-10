@@ -4,6 +4,7 @@ export const maxDuration = 60
 
 export interface ResultadoAnalisis {
   score_total: number
+  tipo_documento: 'tesis_investigacion' | 'apuntes_clase' | 'resumen_capitulo' | 'practicas_resueltas' | 'monografia' | 'guia_estudio' | 'otro'
   criterios: {
     organizacion: number
     profundidad: number
@@ -28,27 +29,72 @@ function calcularBanda(score: number): Pick<ResultadoAnalisis, 'banda_precio' | 
   return           { banda_precio: '10-15',    precio_min: 10, precio_max: 15 }
 }
 
-const PROMPT_EVALUACION = `Eres un evaluador académico de apuntes universitarios peruanos. Analiza el siguiente texto extraído de un apunte y devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.
+const PROMPT_EVALUACION = `Eres un evaluador académico especializado en trabajos universitarios peruanos de la Universidad Autónoma del Perú. Devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.
 
-Evalúa con estos 5 criterios:
-- organizacion (0-25): estructura lógica, índice, secciones claras, secuencia coherente
-- profundidad   (0-25): conceptos desarrollados, análisis, teoría — no solo definiciones
-- ejemplos      (0-20): casos prácticos, ejercicios resueltos, aplicaciones reales
-- cobertura     (0-20): amplitud de temas del curso, completitud del contenido
-- legibilidad   (0-10): claridad del texto, diagramas, formato, ortografía
+═══ PASO 1: IDENTIFICA EL TIPO DE DOCUMENTO ═══
+Clasifica el documento en uno de estos tipos:
+- "tesis_investigacion": investigación completa con hipótesis, marco teórico, metodología, resultados y conclusiones. Trabajo de mayor valor académico.
+- "monografia": trabajo académico estructurado sobre un tema específico, con introducción, desarrollo y conclusiones.
+- "practicas_resueltas": ejercicios, problemas o prácticas con desarrollo y solución paso a paso.
+- "guia_estudio": esquemas, mapas conceptuales, guías de repaso o material didáctico estructurado.
+- "resumen_capitulo": resumen fiel de uno o varios capítulos de un libro o material del curso.
+- "apuntes_clase": notas tomadas en clase, apuntes de sesiones, transcripciones de pizarra.
+- "otro": cualquier otro tipo de documento académico.
 
-Reglas de banda de precio según score_total:
-  0–39  → banda_precio: "rechazado", precio_min: 0,  precio_max: 0
-  40–59 → banda_precio: "gratis",    precio_min: 0,  precio_max: 0
-  60–74 → banda_precio: "2-5",       precio_min: 2,  precio_max: 5
-  75–89 → banda_precio: "5-10",      precio_min: 5,  precio_max: 10
-  90–100→ banda_precio: "10-15",     precio_min: 10, precio_max: 15
+═══ PASO 2: EVALÚA LA CALIDAD (ajustada al tipo) ═══
+Usa los siguientes criterios. El estándar varía según el tipo: una tesis se evalúa distinto a apuntes de primer ciclo.
 
-Si el texto está en blanco, es ilegible o no contiene contenido académico, asigna score_total: 0 con banda "rechazado" y explica en feedback_vendedor.
+- organizacion (0-25):
+  · Tesis/monografía: portada, índice, capítulos bien definidos, bibliografía → hasta 25 pts
+  · Apuntes/resumen: estructura ordenada, uso de títulos y subtítulos → hasta 18 pts
+  · Sin ninguna organización → 0-5 pts
+
+- profundidad (0-25):
+  · Tesis/investigación: marco teórico sólido, análisis crítico, discusión → hasta 25 pts
+  · Monografía/guía: conceptos bien desarrollados, no solo definiciones → hasta 20 pts
+  · Apuntes de ciclos superiores (VI-X): contenido técnico bien explicado → hasta 18 pts
+  · Apuntes de primeros ciclos (I-V): conceptos introductorios bien explicados → hasta 15 pts
+
+- ejemplos (0-20):
+  · Prácticas resueltas: desarrollo completo de ejercicios con procedimiento → hasta 20 pts
+  · Tesis: casos de estudio, datos reales, estadísticas → hasta 18 pts
+  · Apuntes con ejercicios: ejemplos aplicados, casos prácticos → hasta 15 pts
+  · Solo teoría sin ejemplos → 0-5 pts
+
+- cobertura (0-20):
+  · Tesis: todos los capítulos completos → hasta 20 pts
+  · Apuntes: cubre varias semanas/unidades del sílabo → hasta 16 pts
+  · Resumen de un solo capítulo o tema → hasta 10 pts
+
+- legibilidad (0-10):
+  · Texto claro, ortografía correcta, formato limpio, fácil de leer → hasta 10 pts
+  · Texto confuso, muchas faltas, desorganizado → 0-3 pts
+
+═══ PASO 3: DETERMINA LA BANDA DE PRECIO ═══
+Basándote en el score_total Y el tipo de documento:
+
+score 0–39   → "rechazado" (contenido insuficiente, no publicable)
+score 40–59  → "gratis"    (contenido básico o introductorio, valor limitado)
+score 60–74  → "2-5"       (apuntes de calidad media, útiles para el curso)
+score 75–89  → "5-10"      (buen contenido, bien estructurado, ahorra tiempo al comprador)
+score 90–100 → "10-15"     (excelente: tesis, investigación completa o material muy elaborado)
+
+REFERENCIAS DE SCORE POR TIPO (orientativas):
+· Tesis/investigación completa de alta calidad: 85–97
+· Tesis/investigación con deficiencias: 65–84
+· Monografía bien estructurada: 72–88
+· Prácticas resueltas completas: 70–90
+· Apuntes de ciclos superiores (VI-X) bien elaborados: 65–82
+· Apuntes de primeros ciclos (I-V) ordenados: 52–72
+· Resúmenes de capítulo: 48–68
+· Apuntes desorganizados de cualquier ciclo: 30–55
+
+Si el texto es ilegible, está en blanco o no es contenido académico → score_total: 0, banda: "rechazado".
 
 Devuelve EXACTAMENTE este JSON (sin texto extra):
 {
   "score_total": <número entero 0-100>,
+  "tipo_documento": "<tesis_investigacion|monografia|practicas_resueltas|guia_estudio|resumen_capitulo|apuntes_clase|otro>",
   "criterios": {
     "organizacion": <número entero 0-25>,
     "profundidad":  <número entero 0-25>,
@@ -59,8 +105,8 @@ Devuelve EXACTAMENTE este JSON (sin texto extra):
   "banda_precio":       "<rechazado|gratis|2-5|5-10|10-15>",
   "precio_min":         <número>,
   "precio_max":         <número>,
-  "resumen_ia":         "<máximo 3 oraciones describiendo el apunte>",
-  "feedback_vendedor":  "<qué debe mejorar para subir su puntaje>",
+  "resumen_ia":         "<máximo 3 oraciones describiendo el documento y su utilidad para otros estudiantes>",
+  "feedback_vendedor":  "<qué debe mejorar para subir su puntaje, siendo específico según el tipo de documento>",
   "temas_cubiertos":    ["<tema1>", "<tema2>", ...],
   "apto_pack_examen":   <true si score >= 90, false en caso contrario>
 }`
