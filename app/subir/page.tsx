@@ -14,6 +14,21 @@ const PALABRAS_PROHIBIDAS = [
   'cabron', 'bastardo', 'culo', 'porno', 'sexo', 'drogas',
 ]
 
+const TITULOS_PROHIBIDOS = [
+  { patron: /examen/i,     razon: 'exámenes (parciales o finales)' },
+  { patron: /parcial/i,    razon: 'exámenes parciales' },
+  { patron: /\bfinal\b/i,  razon: 'exámenes finales' },
+  { patron: /\btesis\b/i,  razon: 'tesis de grado' },
+]
+
+const detectarTituloProhibido = (titulo: string, nombreArchivo: string): string | null => {
+  const textoCompleto = `${titulo} ${nombreArchivo}`.toLowerCase()
+  for (const { patron, razon } of TITULOS_PROHIBIDOS) {
+    if (patron.test(textoCompleto)) return razon
+  }
+  return null
+}
+
 const contienePalabraProhibida = (texto: string) =>
   PALABRAS_PROHIBIDAS.some(p => texto.toLowerCase().includes(p))
 
@@ -193,24 +208,40 @@ export default function SubirApunte() {
     if (!titulo || !carrera || !ciclo || !curso) { setError('Completa todos los campos obligatorios.'); return }
     if (!archivo)  { setError('Selecciona un archivo PDF.'); return }
 
+    // Detección de contenido prohibido por título/nombre de archivo (todos los modos)
+    const razonProhibida = detectarTituloProhibido(titulo, archivo.name)
+    if (razonProhibida) {
+      setError(`🚫 Este tipo de contenido no está permitido: ${razonProhibida}. Solo se permiten apuntes de clase, resúmenes, prácticas resueltas, guías de estudio y monografías.`)
+      return
+    }
+
     // Modo publicar gratis directo (sin análisis IA)
     if (modoPublicacion === 'gratis') {
       setLoading(true); setError('')
       try {
         const nombreArchivo = `${user.id}-${Date.now()}.pdf`
         const { error: eStorage } = await supabase.storage.from('apuntes').upload(nombreArchivo, archivo)
-        if (eStorage) throw eStorage
+        if (eStorage) throw new Error(`Error de almacenamiento: ${eStorage.message}`)
         const { data: urlData } = supabase.storage.from('apuntes').getPublicUrl(nombreArchivo)
         const { error: eDB } = await supabase.from('apuntes').insert({
-          titulo, descripcion, curso, carrera, ciclo,
+          titulo,
+          descripcion: descripcion || '',
+          curso, carrera, ciclo,
           precio: 0,
           archivo_url: urlData.publicUrl,
           usuario_id: user.id,
-          banda_precio: 'gratis',
+          banda_precio: '1-estrella',
+          score_ia: null,
+          resumen_ia: '',
+          feedback_vendedor: '',
+          temas_cubiertos: [],
+          apto_pack_examen: false,
         })
-        if (eDB) throw eDB
+        if (eDB) throw new Error(`Error al guardar: ${eDB.message} (código: ${eDB.code})`)
         setExito(true)
-      } catch { setError('Error al subir el apunte. Intenta de nuevo.') }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Error al subir el apunte. Intenta de nuevo.')
+      }
       setLoading(false)
       return
     }
@@ -224,22 +255,33 @@ export default function SubirApunte() {
       if (bandaManual !== 'gratis' && (precioManualNum < rangoMin || precioManualNum > rangoMax)) {
         setError(`El precio debe estar entre S/. ${rangoMin} y S/. ${rangoMax}.`); return
       }
+      // Mapear bandas manuales a valores válidos del DB
+      const bandaDB = bandaManual === 'gratis' ? '1-estrella' : bandaManual === '2-5' ? '2-estrellas' : bandaManual === '5-10' ? '3-estrellas' : '4-estrellas'
       setLoading(true); setError('')
       try {
         const nombreArchivo = `${user.id}-${Date.now()}.pdf`
         const { error: eStorage } = await supabase.storage.from('apuntes').upload(nombreArchivo, archivo)
-        if (eStorage) throw eStorage
+        if (eStorage) throw new Error(`Error de almacenamiento: ${eStorage.message}`)
         const { data: urlData } = supabase.storage.from('apuntes').getPublicUrl(nombreArchivo)
         const { error: eDB } = await supabase.from('apuntes').insert({
-          titulo, descripcion, curso, carrera, ciclo,
+          titulo,
+          descripcion: descripcion || '',
+          curso, carrera, ciclo,
           precio: bandaManual === 'gratis' ? 0 : precioManualNum,
           archivo_url: urlData.publicUrl,
           usuario_id: user.id,
-          banda_precio: bandaManual,
+          banda_precio: bandaDB,
+          score_ia: null,
+          resumen_ia: '',
+          feedback_vendedor: '',
+          temas_cubiertos: [],
+          apto_pack_examen: false,
         })
-        if (eDB) throw eDB
+        if (eDB) throw new Error(`Error al guardar: ${eDB.message} (código: ${eDB.code})`)
         setExito(true)
-      } catch { setError('Error al subir el apunte. Intenta de nuevo.') }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Error al subir el apunte. Intenta de nuevo.')
+      }
       setLoading(false)
       return
     }
@@ -260,21 +302,23 @@ export default function SubirApunte() {
       if (eStorage) throw eStorage
       const { data: urlData } = supabase.storage.from('apuntes').getPublicUrl(nombreArchivo)
       const { error: eDB } = await supabase.from('apuntes').insert({
-        titulo, descripcion, curso, carrera, ciclo,
+        titulo,
+        descripcion: descripcion || '',
+        curso, carrera, ciclo,
         precio: precioNum,
         archivo_url: urlData.publicUrl,
         usuario_id: user.id,
         score_ia: analisis.score_total,
         banda_precio: analisis.banda_precio,
-        resumen_ia: analisis.resumen_ia,
-        temas_cubiertos: analisis.temas_cubiertos,
-        feedback_vendedor: analisis.feedback_vendedor,
-        apto_pack_examen: analisis.apto_pack_examen,
+        resumen_ia: analisis.resumen_ia || '',
+        temas_cubiertos: analisis.temas_cubiertos ?? [],
+        feedback_vendedor: analisis.feedback_vendedor || '',
+        apto_pack_examen: analisis.apto_pack_examen ?? false,
         criterios_detalle: analisis.criterios,
       })
-      if (eDB) throw eDB
+      if (eDB) throw new Error(`Error al guardar: ${eDB.message} (código: ${eDB.code})`)
       setExito(true)
-    } catch { setError('Error al subir el apunte. Intenta de nuevo.') }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error al subir el apunte. Intenta de nuevo.') }
     setLoading(false)
   }
 
