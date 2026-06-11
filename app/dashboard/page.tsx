@@ -216,11 +216,12 @@ function MedalBadge({ rank }: { rank: number }) {
 
 function TopCard({ apunte, rank }: { apunte: any; rank: number }) {
   const c = CM[apunte.carrera] ?? DEF
-  const estrellas = apunte.banda_precio === 'precio-libre' ? 5
-    : apunte.banda_precio === '4-estrellas' ? 4
-    : apunte.banda_precio === '3-estrellas' ? 3
-    : apunte.banda_precio === '2-estrellas' ? 2
-    : apunte.banda_precio === '1-estrella'  ? 1 : 0
+  const estrellas = apunte.estrellas != null ? apunte.estrellas
+    : apunte.banda_precio === 'precio-libre' ? 5
+    : apunte.banda_precio === '4-estrellas'  ? 4
+    : apunte.banda_precio === '3-estrellas'  ? 3
+    : apunte.banda_precio === '2-estrellas'  ? 2
+    : apunte.banda_precio === '1-estrella'   ? 1 : 0
   return (
     <div onClick={() => window.location.href = `/apunte/${apunte.id}`}
       className="flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1"

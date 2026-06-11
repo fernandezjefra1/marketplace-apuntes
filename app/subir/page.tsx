@@ -15,14 +15,18 @@ const PALABRAS_PROHIBIDAS = [
 ]
 
 const TITULOS_PROHIBIDOS = [
-  { patron: /examen/i,     razon: 'exámenes (parciales o finales)' },
-  { patron: /parcial/i,    razon: 'exámenes parciales' },
-  { patron: /\bfinal\b/i,  razon: 'exámenes finales' },
-  { patron: /\btesis\b/i,  razon: 'tesis de grado' },
+  { patron: /examen/i,                          razon: 'exámenes (parciales o finales)' },
+  { patron: /\bparcial\b/i,                     razon: 'exámenes parciales' },
+  { patron: /examen\s*final/i,                  razon: 'exámenes finales' },
+  { patron: /\btesis\b/i,                       razon: 'tesis de grado' },
+  { patron: /proyecto\s+de\s+(grado|bachiller)/i, razon: 'tesis / proyecto de grado' },
+  { patron: /trabajo\s+de\s+(grado|titulaci)/i, razon: 'tesis / trabajo de grado' },
+  { patron: /\btesina\b/i,                      razon: 'tesis / tesina' },
+  { patron: /para\s+optar\s+el\s+(grado|t[íi]tulo)/i, razon: 'tesis de grado' },
 ]
 
-const detectarTituloProhibido = (titulo: string, nombreArchivo: string): string | null => {
-  const textoCompleto = `${titulo} ${nombreArchivo}`.toLowerCase()
+const detectarContenidoProhibido = (titulo: string, descripcion: string, nombreArchivo: string): string | null => {
+  const textoCompleto = `${titulo} ${descripcion} ${nombreArchivo}`.toLowerCase()
   for (const { patron, razon } of TITULOS_PROHIBIDOS) {
     if (patron.test(textoCompleto)) return razon
   }
@@ -213,8 +217,8 @@ export default function SubirApunte() {
     if (!titulo || !carrera || !ciclo || !curso) { setError('Completa todos los campos obligatorios.'); return }
     if (!archivo)  { setError('Selecciona un archivo PDF.'); return }
 
-    // Detección de contenido prohibido por título/nombre de archivo (todos los modos)
-    const razonProhibida = detectarTituloProhibido(titulo, archivo.name)
+    // Detección de contenido prohibido por título/descripción/nombre de archivo (todos los modos)
+    const razonProhibida = detectarContenidoProhibido(titulo, descripcion || '', archivo.name)
     if (razonProhibida) {
       setError(`🚫 Este tipo de contenido no está permitido: ${razonProhibida}. Solo se permiten apuntes de clase, resúmenes, prácticas resueltas, guías de estudio y monografías.`)
       return
@@ -314,6 +318,8 @@ export default function SubirApunte() {
         archivo_url: urlData.publicUrl,
         usuario_id: user.id,
         score_ia: analisis.score_total,
+        estrellas: analisis.estrellas,
+        tipo_documento: analisis.tipo_documento,
         banda_precio: analisis.banda_precio,
         resumen_ia: analisis.resumen_ia || '',
         temas_cubiertos: analisis.temas_cubiertos ?? [],
