@@ -4,7 +4,10 @@ export const maxDuration = 60
 
 export interface ResultadoAnalisis {
   score_total: number
-  tipo_documento: 'tesis_investigacion' | 'apuntes_clase' | 'resumen_capitulo' | 'practicas_resueltas' | 'monografia' | 'guia_estudio' | 'otro'
+  estrellas: 0 | 1 | 2 | 3 | 4 | 5
+  tipo_documento: 'apuntes_clase' | 'resumen_capitulo' | 'practicas_resueltas' | 'guia_estudio' | 'monografia' | 'otro'
+  contenido_prohibido: boolean
+  razon_prohibicion: string
   criterios: {
     organizacion: number
     profundidad: number
@@ -12,89 +15,100 @@ export interface ResultadoAnalisis {
     cobertura: number
     legibilidad: number
   }
-  banda_precio: 'rechazado' | 'gratis' | '2-5' | '5-10' | '10-15'
+  banda_precio: 'rechazado' | '1-estrella' | '2-estrellas' | '3-estrellas' | '4-estrellas' | 'precio-libre'
   precio_min: number
-  precio_max: number
+  precio_max: number   // 0 = sin tope máximo (precio libre)
+  precio_sugerido: number
   resumen_ia: string
   feedback_vendedor: string
   temas_cubiertos: string[]
   apto_pack_examen: boolean
 }
 
-function calcularBanda(score: number): Pick<ResultadoAnalisis, 'banda_precio' | 'precio_min' | 'precio_max'> {
-  if (score < 40) return { banda_precio: 'rechazado', precio_min: 0, precio_max: 0 }
-  if (score < 60) return { banda_precio: 'gratis',    precio_min: 0, precio_max: 0 }
-  if (score < 75) return { banda_precio: '2-5',       precio_min: 2, precio_max: 5 }
-  if (score < 90) return { banda_precio: '5-10',      precio_min: 5, precio_max: 10 }
-  return           { banda_precio: '10-15',    precio_min: 10, precio_max: 15 }
+function calcularBanda(score: number, prohibido: boolean): Pick<ResultadoAnalisis, 'banda_precio' | 'estrellas' | 'precio_min' | 'precio_max' | 'precio_sugerido'> {
+  if (prohibido || score < 40) return { banda_precio: 'rechazado',    estrellas: 0, precio_min: 0,  precio_max: 0,  precio_sugerido: 0  }
+  if (score < 55)              return { banda_precio: '1-estrella',   estrellas: 1, precio_min: 0,  precio_max: 5,  precio_sugerido: 2  }
+  if (score < 70)              return { banda_precio: '2-estrellas',  estrellas: 2, precio_min: 2,  precio_max: 12, precio_sugerido: 5  }
+  if (score < 80)              return { banda_precio: '3-estrellas',  estrellas: 3, precio_min: 5,  precio_max: 20, precio_sugerido: 10 }
+  if (score < 90)              return { banda_precio: '4-estrellas',  estrellas: 4, precio_min: 10, precio_max: 35, precio_sugerido: 18 }
+  return                              { banda_precio: 'precio-libre', estrellas: 5, precio_min: 15, precio_max: 0,  precio_sugerido: 25 }
 }
 
-const PROMPT_EVALUACION = `Eres un evaluador académico especializado en trabajos universitarios peruanos de la Universidad Autónoma del Perú. Devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.
+const PROMPT_EVALUACION = `Eres un moderador y evaluador académico de la plataforma ApuntesUA (Universidad Autónoma del Perú). Tu trabajo es revisar documentos académicos antes de publicarlos. Devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.
 
-═══ PASO 1: IDENTIFICA EL TIPO DE DOCUMENTO ═══
-Clasifica el documento en uno de estos tipos:
-- "tesis_investigacion": investigación completa con hipótesis, marco teórico, metodología, resultados y conclusiones. Trabajo de mayor valor académico.
-- "monografia": trabajo académico estructurado sobre un tema específico, con introducción, desarrollo y conclusiones.
-- "practicas_resueltas": ejercicios, problemas o prácticas con desarrollo y solución paso a paso.
-- "guia_estudio": esquemas, mapas conceptuales, guías de repaso o material didáctico estructurado.
-- "resumen_capitulo": resumen fiel de uno o varios capítulos de un libro o material del curso.
-- "apuntes_clase": notas tomadas en clase, apuntes de sesiones, transcripciones de pizarra.
-- "otro": cualquier otro tipo de documento académico.
+════════════════════════════════════════
+PASO 1 — DETECCIÓN DE CONTENIDO PROHIBIDO
+════════════════════════════════════════
+Los siguientes tipos de documentos están PROHIBIDOS en esta plataforma y deben ser rechazados de inmediato:
 
-═══ PASO 2: EVALÚA LA CALIDAD (ajustada al tipo) ═══
-Usa los siguientes criterios. El estándar varía según el tipo: una tesis se evalúa distinto a apuntes de primer ciclo.
+🚫 EXÁMENES: Exámenes parciales, exámenes finales, quizzes oficiales o cualquier evaluación calificada de un curso. Señales: preguntas numeradas de examen, instrucciones de "no voltear la hoja", nombre del docente + fecha de examen, preguntas del tipo "Resuelva los siguientes problemas (4 pts c/u)".
 
-- organizacion (0-25):
-  · Tesis/monografía: portada, índice, capítulos bien definidos, bibliografía → hasta 25 pts
-  · Apuntes/resumen: estructura ordenada, uso de títulos y subtítulos → hasta 18 pts
-  · Sin ninguna organización → 0-5 pts
+🚫 TESIS DE GRADO: Tesis de bachillerato, maestría o doctorado. Señales: carátula con "Tesis para optar el grado de...", asesor de tesis, comité evaluador, declaración jurada del tesista, acta de sustentación.
 
-- profundidad (0-25):
-  · Tesis/investigación: marco teórico sólido, análisis crítico, discusión → hasta 25 pts
-  · Monografía/guía: conceptos bien desarrollados, no solo definiciones → hasta 20 pts
-  · Apuntes de ciclos superiores (VI-X): contenido técnico bien explicado → hasta 18 pts
-  · Apuntes de primeros ciclos (I-V): conceptos introductorios bien explicados → hasta 15 pts
+🚫 METODOLOGÍA DE INVESTIGACIÓN PURA: Documentos cuyo contenido PRINCIPAL es solo el diseño metodológico de una investigación (tipo de investigación, población, muestra, instrumentos) sin ser parte de apuntes de un curso de metodología.
 
-- ejemplos (0-20):
-  · Prácticas resueltas: desarrollo completo de ejercicios con procedimiento → hasta 20 pts
-  · Tesis: casos de estudio, datos reales, estadísticas → hasta 18 pts
-  · Apuntes con ejercicios: ejemplos aplicados, casos prácticos → hasta 15 pts
-  · Solo teoría sin ejemplos → 0-5 pts
+Si el documento ES de alguno de estos tipos prohibidos:
+→ contenido_prohibido: true
+→ razon_prohibicion: explicar en 1-2 oraciones qué tipo de documento prohibido es y por qué no puede publicarse
+→ score_total: 0, estrellas: 0, banda_precio: "rechazado"
+→ No evalúes el resto de criterios, llena los demás campos con valores neutros.
 
-- cobertura (0-20):
-  · Tesis: todos los capítulos completos → hasta 20 pts
-  · Apuntes: cubre varias semanas/unidades del sílabo → hasta 16 pts
-  · Resumen de un solo capítulo o tema → hasta 10 pts
+════════════════════════════════════════
+PASO 2 — CLASIFICACIÓN DEL TIPO (si no está prohibido)
+════════════════════════════════════════
+Clasifica en uno de estos tipos permitidos:
+- "apuntes_clase": notas de sesiones, apuntes de pizarra, resúmenes de clase
+- "resumen_capitulo": resumen de uno o varios capítulos de libro o material del curso
+- "practicas_resueltas": ejercicios o prácticas con desarrollo y solución paso a paso
+- "guia_estudio": esquemas, mapas conceptuales, guías de repaso
+- "monografia": trabajo académico estructurado sobre un tema con introducción, desarrollo y conclusiones
+- "otro": material didáctico que no encaje en los anteriores
 
-- legibilidad (0-10):
-  · Texto claro, ortografía correcta, formato limpio, fácil de leer → hasta 10 pts
-  · Texto confuso, muchas faltas, desorganizado → 0-3 pts
+════════════════════════════════════════
+PASO 3 — EVALUACIÓN Y CALIFICACIÓN CON ESTRELLAS
+════════════════════════════════════════
+Evalúa la CALIDAD con estos 5 criterios:
 
-═══ PASO 3: DETERMINA LA BANDA DE PRECIO ═══
-Basándote en el score_total Y el tipo de documento:
+- organizacion (0-25): estructura lógica, uso de títulos/subtítulos, orden de ideas, índice si aplica
+- profundidad (0-25): desarrollo de conceptos, no solo copiar definiciones; adapta el estándar al ciclo detectado
+  · Ciclos I-V (introductorio): conceptos bien explicados con ejemplos → máx 18 pts
+  · Ciclos VI-X (avanzado): análisis técnico, relaciones entre conceptos → hasta 25 pts
+  · Monografías: desarrollo argumentativo y fuentes → hasta 22 pts
+- ejemplos (0-20): casos prácticos, ejercicios ilustrativos, aplicaciones reales del concepto
+- cobertura (0-20): amplitud temática; cuántas semanas/unidades del curso cubre
+- legibilidad (0-10): claridad, ortografía, formato limpio, fácil de seguir
 
-score 0–39   → "rechazado" (contenido insuficiente, no publicable)
-score 40–59  → "gratis"    (contenido básico o introductorio, valor limitado)
-score 60–74  → "2-5"       (apuntes de calidad media, útiles para el curso)
-score 75–89  → "5-10"      (buen contenido, bien estructurado, ahorra tiempo al comprador)
-score 90–100 → "10-15"     (excelente: tesis, investigación completa o material muy elaborado)
+CONVERSIÓN DE SCORE A ESTRELLAS:
+  score  0-39  → 0 estrellas → "rechazado"    (no publicable)
+  score 40-54  → 1 estrella  → "1-estrella"   (muy básico, precio máx S/. 5)
+  score 55-69  → 2 estrellas → "2-estrellas"  (básico con valor, precio S/. 2-12)
+  score 70-79  → 3 estrellas → "3-estrellas"  (buen apunte, precio S/. 5-20)
+  score 80-89  → 4 estrellas → "4-estrellas"  (alta calidad, precio S/. 10-35)
+  score 90-100 → 5 estrellas → "precio-libre" (excelente, EL CREADOR PONE EL PRECIO QUE QUIERA, sugerido S/. 20+)
 
-REFERENCIAS DE SCORE POR TIPO (orientativas):
-· Tesis/investigación completa de alta calidad: 85–97
-· Tesis/investigación con deficiencias: 65–84
-· Monografía bien estructurada: 72–88
-· Prácticas resueltas completas: 70–90
-· Apuntes de ciclos superiores (VI-X) bien elaborados: 65–82
-· Apuntes de primeros ciclos (I-V) ordenados: 52–72
-· Resúmenes de capítulo: 48–68
-· Apuntes desorganizados de cualquier ciclo: 30–55
+REFERENCIAS ORIENTATIVAS DE SCORE:
+· Monografía bien estructurada con fuentes: 75–88
+· Prácticas resueltas completas y detalladas: 72–90
+· Apuntes ciclos VI-X bien elaborados: 68–85
+· Apuntes ciclos I-V ordenados y completos: 55–72
+· Guía de estudio esquemática pero útil: 60–78
+· Resumen de capítulo fiel y organizado: 50–70
+· Apuntes desorganizados de cualquier ciclo: 30–54
+· Contenido copiado/pegado sin elaboración: 25–45
 
-Si el texto es ilegible, está en blanco o no es contenido académico → score_total: 0, banda: "rechazado".
+════════════════════════════════════════
+PASO 4 — PRECIO SUGERIDO
+════════════════════════════════════════
+Para 5 estrellas (precio libre), sugiere un precio inicial justo en precio_sugerido basándote en la profundidad y utilidad real del documento. No hay máximo.
+Para 4 estrellas o menos, precio_sugerido debe estar dentro del rango.
 
 Devuelve EXACTAMENTE este JSON (sin texto extra):
 {
-  "score_total": <número entero 0-100>,
-  "tipo_documento": "<tesis_investigacion|monografia|practicas_resueltas|guia_estudio|resumen_capitulo|apuntes_clase|otro>",
+  "score_total":        <número entero 0-100>,
+  "estrellas":          <número entero 0-5>,
+  "tipo_documento":     "<apuntes_clase|resumen_capitulo|practicas_resueltas|guia_estudio|monografia|otro>",
+  "contenido_prohibido": <true|false>,
+  "razon_prohibicion":  "<vacío si no está prohibido, o explicación si sí lo está>",
   "criterios": {
     "organizacion": <número entero 0-25>,
     "profundidad":  <número entero 0-25>,
@@ -102,13 +116,14 @@ Devuelve EXACTAMENTE este JSON (sin texto extra):
     "cobertura":    <número entero 0-20>,
     "legibilidad":  <número entero 0-10>
   },
-  "banda_precio":       "<rechazado|gratis|2-5|5-10|10-15>",
+  "banda_precio":       "<rechazado|1-estrella|2-estrellas|3-estrellas|4-estrellas|precio-libre>",
   "precio_min":         <número>,
-  "precio_max":         <número>,
-  "resumen_ia":         "<máximo 3 oraciones describiendo el documento y su utilidad para otros estudiantes>",
-  "feedback_vendedor":  "<qué debe mejorar para subir su puntaje, siendo específico según el tipo de documento>",
+  "precio_max":         <número, 0 si es precio libre>,
+  "precio_sugerido":    <número entero, precio justo sugerido>,
+  "resumen_ia":         "<máximo 3 oraciones describiendo el apunte y su utilidad para otros estudiantes>",
+  "feedback_vendedor":  "<consejo específico de qué mejorar para subir la calificación>",
   "temas_cubiertos":    ["<tema1>", "<tema2>", ...],
-  "apto_pack_examen":   <true si score >= 90, false en caso contrario>
+  "apto_pack_examen":   <true si estrellas == 5, false en caso contrario>
 }`
 
 export async function POST(request: Request) {
@@ -178,11 +193,13 @@ export async function POST(request: Request) {
       resultado = JSON.parse(match[0])
     }
 
-    const bandaCorrecta = calcularBanda(resultado.score_total)
+    const bandaCorrecta = calcularBanda(resultado.score_total, !!resultado.contenido_prohibido)
     resultado.banda_precio     = bandaCorrecta.banda_precio
+    resultado.estrellas        = bandaCorrecta.estrellas
     resultado.precio_min       = bandaCorrecta.precio_min
     resultado.precio_max       = bandaCorrecta.precio_max
-    resultado.apto_pack_examen = resultado.score_total >= 90
+    resultado.precio_sugerido  = bandaCorrecta.precio_sugerido
+    resultado.apto_pack_examen = resultado.estrellas === 5
 
     return Response.json(resultado)
 

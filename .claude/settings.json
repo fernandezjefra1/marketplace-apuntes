@@ -12,7 +12,8 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('groq:', p.dependencies['groq-sdk'], 'pdfjs:', p.dependencies['pdfjs-dist']\\)\")",
-      "Bash(node -e \"const v = require\\('./node_modules/pdfjs-dist/package.json'\\).version; console.log\\(v\\)\")"
+      "Bash(node -e \"const v = require\\('./node_modules/pdfjs-dist/package.json'\\).version; console.log\\(v\\)\")",
+      "Bash(npx tsc *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jeffe\\marketplace-apuntes\\app\\api"

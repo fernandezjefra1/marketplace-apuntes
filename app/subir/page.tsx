@@ -40,23 +40,36 @@ async function extractPdfText(file: File): Promise<string> {
   return partes.join('\n\n')
 }
 
-function scoreConfig(score: number) {
-  if (score < 40) return { grad: 'linear-gradient(135deg,#DC2626,#EF4444)', color: '#DC2626', light: '#FEF2F2', label: 'Muy bajo', emoji: '📉' }
-  if (score < 60) return { grad: 'linear-gradient(135deg,#EA580C,#F97316)', color: '#EA580C', light: '#FFF7ED', label: 'Por mejorar', emoji: '📈' }
-  if (score < 75) return { grad: 'linear-gradient(135deg,#CA8A04,#EAB308)', color: '#CA8A04', light: '#FEFCE8', label: 'Regular', emoji: '⚡' }
-  if (score < 90) return { grad: 'linear-gradient(135deg,#2563EB,#3B82F6)', color: '#2563EB', light: '#EFF6FF', label: 'Bueno', emoji: '🎯' }
-  return { grad: 'linear-gradient(135deg,#15803D,#16A34A)', color: '#15803D', light: '#F0FDF4', label: 'Excelente', emoji: '🌟' }
+function estrellaConfig(estrellas: number) {
+  if (estrellas === 0) return { grad: 'linear-gradient(135deg,#DC2626,#EF4444)', color: '#DC2626', light: '#FEF2F2', label: 'No apto',    emoji: '🚫' }
+  if (estrellas === 1) return { grad: 'linear-gradient(135deg,#EA580C,#F97316)', color: '#EA580C', light: '#FFF7ED', label: 'Muy básico', emoji: '📄' }
+  if (estrellas === 2) return { grad: 'linear-gradient(135deg,#D97706,#F59E0B)', color: '#D97706', light: '#FFFBEB', label: 'Básico',     emoji: '📝' }
+  if (estrellas === 3) return { grad: 'linear-gradient(135deg,#2563EB,#3B82F6)', color: '#2563EB', light: '#EFF6FF', label: 'Bueno',      emoji: '👍' }
+  if (estrellas === 4) return { grad: 'linear-gradient(135deg,#7C3AED,#8B5CF6)', color: '#7C3AED', light: '#F5F3FF', label: 'Muy bueno',  emoji: '🎯' }
+  return                      { grad: 'linear-gradient(135deg,#15803D,#16A34A)', color: '#15803D', light: '#F0FDF4', label: 'Excelente',  emoji: '🌟' }
 }
 
 function bandaInfo(banda: ResultadoAnalisis['banda_precio']) {
-  const map = {
-    rechazado: { text: 'No apto para publicar', color: '#DC2626', bg: '#FEF2F2' },
-    gratis:    { text: 'Gratis',                color: '#15803D', bg: '#F0FDF4' },
-    '2-5':     { text: 'S/. 2 – 5',            color: '#2563EB', bg: '#EFF6FF' },
-    '5-10':    { text: 'S/. 5 – 10',           color: '#7C3AED', bg: '#F5F3FF' },
-    '10-15':   { text: 'S/. 10 – 15',          color: '#EA580C', bg: '#FFF7ED' },
+  const map: Record<string, { text: string; color: string; bg: string }> = {
+    'rechazado':    { text: 'No apto para publicar',      color: '#DC2626', bg: '#FEF2F2' },
+    '1-estrella':   { text: 'Gratis – S/. 5',             color: '#EA580C', bg: '#FFF7ED' },
+    '2-estrellas':  { text: 'S/. 2 – 12',                 color: '#D97706', bg: '#FFFBEB' },
+    '3-estrellas':  { text: 'S/. 5 – 20',                 color: '#2563EB', bg: '#EFF6FF' },
+    '4-estrellas':  { text: 'S/. 10 – 35',                color: '#7C3AED', bg: '#F5F3FF' },
+    'precio-libre': { text: '🔓 Precio libre (tú decides)', color: '#15803D', bg: '#F0FDF4' },
   }
-  return map[banda]
+  return map[banda] ?? map['rechazado']
+}
+
+function StarsDisplay({ estrellas, size = 'md' }: { estrellas: number; size?: 'sm' | 'md' | 'lg' }) {
+  const sz = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-base' : 'text-xl'
+  return (
+    <div className={`flex gap-1 ${sz}`}>
+      {[1,2,3,4,5].map(i => (
+        <span key={i} style={{ filter: i <= estrellas ? 'none' : 'grayscale(1) opacity(.25)' }}>⭐</span>
+      ))}
+    </div>
+  )
 }
 
 function BarraCriterio({ label, valor, max, delay = 0 }: { label: string; valor: number; max: number; delay?: number }) {
@@ -159,7 +172,7 @@ export default function SubirApunte() {
       if (!res.ok) { setErrorAnalisis(data.error || 'Error al analizar.'); setAnalizando(false); return }
       const r = data as ResultadoAnalisis
       setAnalisis(r)
-      setPrecio(r.banda_precio === 'rechazado' || r.banda_precio === 'gratis' ? '0' : String(r.precio_min))
+      setPrecio(r.banda_precio === 'rechazado' ? '0' : String(r.precio_sugerido))
     } catch {
       setErrorAnalisis('No se pudo conectar con el servicio de análisis. Intenta de nuevo.')
     }
@@ -234,7 +247,9 @@ export default function SubirApunte() {
     if (!analisis) { setError('Espera a que termine el análisis.'); return }
     if (analisis.banda_precio === 'rechazado') { setError('El apunte no cumple los requisitos mínimos.'); return }
     const precioNum = parseFloat(precio)
-    if (analisis.banda_precio !== 'gratis' && (precioNum < analisis.precio_min || precioNum > analisis.precio_max)) {
+    if (analisis.banda_precio === 'precio-libre') {
+      if (precioNum < analisis.precio_min) { setError(`El precio mínimo para un apunte de 5 estrellas es S/. ${analisis.precio_min}.`); return }
+    } else if (precioNum < analisis.precio_min || precioNum > analisis.precio_max) {
       setError(`El precio debe estar entre S/. ${analisis.precio_min} y S/. ${analisis.precio_max}.`)
       return
     }
@@ -246,7 +261,7 @@ export default function SubirApunte() {
       const { data: urlData } = supabase.storage.from('apuntes').getPublicUrl(nombreArchivo)
       const { error: eDB } = await supabase.from('apuntes').insert({
         titulo, descripcion, curso, carrera, ciclo,
-        precio: analisis.banda_precio === 'gratis' ? 0 : precioNum,
+        precio: precioNum,
         archivo_url: urlData.publicUrl,
         usuario_id: user.id,
         score_ia: analisis.score_total,
@@ -286,7 +301,6 @@ export default function SubirApunte() {
     </>
   )
 
-  const cfg = analisis ? scoreConfig(analisis.score_total) : null
   const puedePublicar = !analizando && !loading && (
     (modoPublicacion === 'gratis' && !!archivo) ||
     (modoPublicacion === 'ia' && !!analisis && analisis.banda_precio !== 'rechazado') ||
@@ -601,7 +615,7 @@ export default function SubirApunte() {
 
                   <div className="flex items-center gap-2.5 mb-5">
                     <div className="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0"
-                      style={{ background: analizando ? 'linear-gradient(135deg,#EA580C,#F97316)' : analisis ? (cfg?.grad ?? '') : 'linear-gradient(135deg,#EF4444,#F87171)', color: 'white' }}>
+                      style={{ background: analizando ? 'linear-gradient(135deg,#EA580C,#F97316)' : analisis ? estrellaConfig(analisis.estrellas ?? 0).grad : 'linear-gradient(135deg,#EF4444,#F87171)', color: 'white' }}>
                       {analizando ? <span className="spin-anim inline-block">⟳</span> : analisis ? '✦' : '!'}
                     </div>
                     <div>
@@ -677,37 +691,42 @@ export default function SubirApunte() {
                   )}
 
                   {/* RESULTADO */}
-                  {analisis && !analizando && cfg && (
+                  {analisis && !analizando && (() => {
+                    const cfg2 = estrellaConfig(analisis.estrellas ?? 0)
+                    return (
                     <div className="fade-up rounded-2xl overflow-hidden border border-gray-100"
                       style={{ boxShadow: '0 8px 32px rgba(0,0,0,.08)' }}>
 
                       {/* Cabecera con gradiente */}
-                      <div className="p-6 relative overflow-hidden" style={{ background: cfg.grad }}>
+                      <div className="p-6 relative overflow-hidden" style={{ background: cfg2.grad }}>
                         <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white opacity-10" />
                         <div className="absolute right-12 -bottom-8 w-20 h-20 rounded-full bg-white opacity-10" />
 
-                        <div className="relative flex items-center justify-between">
+                        <div className="relative flex items-start justify-between gap-3">
                           <div className="flex items-center gap-4">
-                            <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur flex flex-col items-center justify-center">
+                            {/* Score circle */}
+                            <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur flex flex-col items-center justify-center flex-shrink-0">
                               <span className="text-white font-black text-3xl leading-none">{analisis.score_total}</span>
                               <span className="text-white/70 text-xs">/ 100</span>
                             </div>
                             <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-white font-black text-xl">{cfg.emoji}</span>
-                                <span className="text-white font-bold text-lg">{cfg.label}</span>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-white font-black text-xl">{cfg2.emoji}</span>
+                                <span className="text-white font-bold text-lg">{cfg2.label}</span>
                               </div>
+                              {/* ESTRELLAS */}
+                              <StarsDisplay estrellas={analisis.estrellas ?? 0} size="lg" />
                               {analisis.apto_pack_examen && (
-                                <span className="inline-flex items-center gap-1 bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                                  ⭐ Apto para Pack Examen
+                                <span className="inline-flex items-center gap-1 bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full mt-2">
+                                  ✨ Apto para Pack Examen
                                 </span>
                               )}
                             </div>
                           </div>
-                          <div className="text-right">
+                          <div className="text-right flex-shrink-0">
                             {(() => { const b = bandaInfo(analisis.banda_precio); return (
-                              <span className="inline-block text-sm font-bold px-3 py-1.5 rounded-xl"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.25)', color: 'white' }}>
+                              <span className="inline-block text-xs font-bold px-3 py-2 rounded-xl leading-snug text-center"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.25)', color: 'white', maxWidth: 110 }}>
                                 {b.text}
                               </span>
                             )})()}
@@ -715,19 +734,32 @@ export default function SubirApunte() {
                         </div>
                       </div>
 
+                      {/* CONTENIDO PROHIBIDO */}
+                      {analisis.contenido_prohibido && analisis.razon_prohibicion && (
+                        <div className="px-6 pt-5 pb-0">
+                          <div className="flex items-start gap-3 p-4 rounded-2xl border-2 border-red-200 bg-red-50">
+                            <span className="text-2xl flex-shrink-0">🚫</span>
+                            <div>
+                              <p className="font-black text-red-700 text-sm mb-1">Contenido no permitido en la plataforma</p>
+                              <p className="text-red-600 text-xs leading-relaxed">{analisis.razon_prohibicion}</p>
+                              <p className="text-red-400 text-xs mt-2">Solo se permiten: apuntes de clase, resúmenes, prácticas resueltas, guías de estudio y monografías.</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Cuerpo */}
                       <div className="p-6 bg-white">
 
                         {/* Tipo de documento detectado */}
                         {analisis.tipo_documento && (() => {
                           const TIPOS: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-                            tesis_investigacion: { label: 'Tesis / Investigación', icon: '🎓', color: '#7C3AED', bg: '#F5F3FF' },
-                            monografia:          { label: 'Monografía',            icon: '📋', color: '#0891B2', bg: '#F0F9FF' },
-                            practicas_resueltas: { label: 'Prácticas resueltas',   icon: '✏️', color: '#D97706', bg: '#FFFBEB' },
-                            guia_estudio:        { label: 'Guía de estudio',       icon: '🗂️', color: '#059669', bg: '#F0FDF4' },
-                            resumen_capitulo:    { label: 'Resumen de capítulo',   icon: '📝', color: '#EA580C', bg: '#FFF7ED' },
-                            apuntes_clase:       { label: 'Apuntes de clase',      icon: '📄', color: '#2563EB', bg: '#EFF6FF' },
-                            otro:                { label: 'Documento académico',   icon: '📁', color: '#6B7280', bg: '#F9FAFB' },
+                            monografia:          { label: 'Monografía',          icon: '📋', color: '#0891B2', bg: '#F0F9FF' },
+                            practicas_resueltas: { label: 'Prácticas resueltas', icon: '✏️', color: '#D97706', bg: '#FFFBEB' },
+                            guia_estudio:        { label: 'Guía de estudio',     icon: '🗂️', color: '#059669', bg: '#F0FDF4' },
+                            resumen_capitulo:    { label: 'Resumen de capítulo', icon: '📝', color: '#EA580C', bg: '#FFF7ED' },
+                            apuntes_clase:       { label: 'Apuntes de clase',    icon: '📄', color: '#2563EB', bg: '#EFF6FF' },
+                            otro:                { label: 'Documento académico', icon: '📁', color: '#6B7280', bg: '#F9FAFB' },
                           }
                           const t = TIPOS[analisis.tipo_documento] || TIPOS.otro
                           return (
@@ -798,7 +830,8 @@ export default function SubirApunte() {
                         )}
                       </div>
                     </div>
-                  )}
+                  )
+                  })()}
                 </div>
               </>
             )}
@@ -883,15 +916,31 @@ export default function SubirApunte() {
                     </div>
                   </div>
 
-                  {analisis.banda_precio === 'gratis' ? (
-                    <div className="flex items-center gap-4 p-5 rounded-2xl border-2 border-green-200"
-                      style={{ backgroundColor: '#F0FDF4' }}>
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-                        style={{ backgroundColor: '#DCFCE7' }}>🆓</div>
-                      <div>
-                        <p className="font-bold text-green-800 text-sm">Tu apunte se publicará gratis</p>
-                        <p className="text-green-600 text-xs mt-0.5">Con un puntaje más alto podrás cobrar por él</p>
+                  {analisis.banda_precio === 'precio-libre' ? (
+                    <div>
+                      {/* Banner precio libre */}
+                      <div className="flex items-center gap-3 mb-4 p-4 rounded-2xl border-2"
+                        style={{ backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }}>
+                        <span className="text-2xl flex-shrink-0">🔓</span>
+                        <div>
+                          <p className="font-black text-green-800 text-sm">¡Precio libre! Tú decides cuánto vale</p>
+                          <p className="text-green-600 text-xs mt-0.5">Tu apunte tiene 5 estrellas — el mercado libre aplica. Mínimo sugerido: S/. {analisis.precio_min}.</p>
+                        </div>
                       </div>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">S/.</span>
+                        <input
+                          className="input-base"
+                          style={{ paddingLeft: 40 }}
+                          type="number"
+                          value={precio}
+                          onChange={e => setPrecio(e.target.value)}
+                          min={analisis.precio_min}
+                          step="0.5"
+                          placeholder={`Mínimo S/. ${analisis.precio_min} — sin límite superior`}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1.5">Sin tope máximo. El precio sugerido por la IA es S/. {analisis.precio_sugerido}.</p>
                     </div>
                   ) : (
                     <div>
@@ -899,9 +948,10 @@ export default function SubirApunte() {
                         style={{ backgroundColor: '#F5F3FF', border: '1.5px solid #DDD6FE' }}>
                         <span className="text-xl">💰</span>
                         <p className="text-sm text-purple-700 font-medium">
-                          Con tu puntaje puedes cobrar entre{' '}
-                          <span className="font-black">S/. {analisis.precio_min}</span> y{' '}
-                          <span className="font-black">S/. {analisis.precio_max}</span>
+                          {analisis.precio_min === 0
+                            ? <>Puedes publicarlo <span className="font-black">gratis</span> o cobrar hasta <span className="font-black">S/. {analisis.precio_max}</span></>
+                            : <>Con tu puntaje puedes cobrar entre <span className="font-black">S/. {analisis.precio_min}</span> y <span className="font-black">S/. {analisis.precio_max}</span></>
+                          }
                         </p>
                       </div>
                       <div className="relative">
@@ -918,6 +968,7 @@ export default function SubirApunte() {
                           placeholder={`${analisis.precio_min} – ${analisis.precio_max}`}
                         />
                       </div>
+                      <p className="text-xs text-gray-400 mt-1.5">Precio sugerido por la IA: S/. {analisis.precio_sugerido}</p>
                     </div>
                   )}
                 </div>
