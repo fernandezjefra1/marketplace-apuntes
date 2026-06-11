@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { ResultadoAnalisis } from '../api/analizar-apunte/route'
 
@@ -127,6 +127,11 @@ export default function SubirApunte() {
   const [errorAnalisis, setErrorAnalisis] = useState('')
   const [modoManual, setModoManual]   = useState(false)
   const [bandaManual, setBandaManual] = useState<'gratis' | '2-5' | '5-10' | '10-15' | ''>('')
+  const errorRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [error])
 
   const STEPS = modoPublicacion === 'gratis'
     ? ['Información', 'Modo de publicación', 'Archivo PDF', 'Publicar']
@@ -450,7 +455,7 @@ export default function SubirApunte() {
               </div>
 
               {error && (
-                <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl p-4 mb-6">
+                <div ref={errorRef} className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl p-4 mb-6">
                   <span className="text-lg flex-shrink-0">⚠️</span>
                   <p className="text-red-600 text-sm font-medium">{error}</p>
                 </div>

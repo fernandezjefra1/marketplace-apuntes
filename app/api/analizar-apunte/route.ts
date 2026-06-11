@@ -26,12 +26,12 @@ export interface ResultadoAnalisis {
 }
 
 function calcularBanda(score: number, prohibido: boolean): Pick<ResultadoAnalisis, 'banda_precio' | 'estrellas' | 'precio_min' | 'precio_max' | 'precio_sugerido'> {
-  if (prohibido || score < 40) return { banda_precio: 'rechazado',    estrellas: 0, precio_min: 0,  precio_max: 0,  precio_sugerido: 0  }
-  if (score < 55)              return { banda_precio: '1-estrella',   estrellas: 1, precio_min: 0,  precio_max: 5,  precio_sugerido: 2  }
-  if (score < 70)              return { banda_precio: '2-estrellas',  estrellas: 2, precio_min: 2,  precio_max: 12, precio_sugerido: 5  }
+  if (prohibido || score < 45) return { banda_precio: 'rechazado',    estrellas: 0, precio_min: 0,  precio_max: 0,  precio_sugerido: 0  }
+  if (score < 58)              return { banda_precio: '1-estrella',   estrellas: 1, precio_min: 0,  precio_max: 5,  precio_sugerido: 2  }
+  if (score < 70)              return { banda_precio: '2-estrellas',  estrellas: 2, precio_min: 2,  precio_max: 12, precio_sugerido: 6  }
   if (score < 80)              return { banda_precio: '3-estrellas',  estrellas: 3, precio_min: 5,  precio_max: 20, precio_sugerido: 10 }
   if (score < 90)              return { banda_precio: '4-estrellas',  estrellas: 4, precio_min: 10, precio_max: 35, precio_sugerido: 18 }
-  return                              { banda_precio: 'precio-libre', estrellas: 5, precio_min: 15, precio_max: 0,  precio_sugerido: 25 }
+  return                              { banda_precio: 'precio-libre', estrellas: 5, precio_min: 15, precio_max: 0,  precio_sugerido: 28 }
 }
 
 const PROMPT_EVALUACION = `Eres un moderador y evaluador académico de la plataforma ApuntesUA (Universidad Autónoma del Perú). Tu trabajo es revisar documentos académicos antes de publicarlos. Devuelve ÚNICAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin bloques de código.
@@ -51,6 +51,7 @@ Si el documento ES de alguno de estos tipos prohibidos:
 → contenido_prohibido: true
 → razon_prohibicion: explicar en 1-2 oraciones qué tipo de documento prohibido es y por qué no puede publicarse
 → score_total: 0, estrellas: 0, banda_precio: "rechazado"
+→ Sé muy explícito en razon_prohibicion sobre qué tipo de contenido prohibido es
 → No evalúes el resto de criterios, llena los demás campos con valores neutros.
 
 ════════════════════════════════════════
@@ -65,36 +66,74 @@ Clasifica en uno de estos tipos permitidos:
 - "otro": material didáctico que no encaje en los anteriores
 
 ════════════════════════════════════════
-PASO 3 — EVALUACIÓN Y CALIFICACIÓN CON ESTRELLAS
+PASO 3 — EVALUACIÓN Y CALIFICACIÓN CON ESTRELLAS (SE ESTRICTO)
 ════════════════════════════════════════
-Evalúa la CALIDAD con estos 5 criterios:
+Evalúa la CALIDAD con estos 5 criterios. SÉ CRÍTICO Y EXIGENTE — la mayoría de apuntes son mediocres:
 
 - organizacion (0-25): estructura lógica, uso de títulos/subtítulos, orden de ideas, índice si aplica
-- profundidad (0-25): desarrollo de conceptos, no solo copiar definiciones; adapta el estándar al ciclo detectado
-  · Ciclos I-V (introductorio): conceptos bien explicados con ejemplos → máx 18 pts
-  · Ciclos VI-X (avanzado): análisis técnico, relaciones entre conceptos → hasta 25 pts
-  · Monografías: desarrollo argumentativo y fuentes → hasta 22 pts
-- ejemplos (0-20): casos prácticos, ejercicios ilustrativos, aplicaciones reales del concepto
-- cobertura (0-20): amplitud temática; cuántas semanas/unidades del curso cubre
+  · Solo bullet points sueltos sin jerarquía = máx 8 pts
+  · Títulos pero sin desarrollo = máx 12 pts
+  · Bien estructurado con secciones claras = hasta 20 pts
+  · Sobresaliente con índice, subtítulos y flujo lógico = hasta 25 pts
+
+- profundidad (0-25): desarrollo real de conceptos; penaliza fuerte copiar definiciones sin elaborar
+  · Ciclos I-V: conceptos explicados con palabras propias + ejemplos → máx 16 pts
+  · Ciclos VI-X: análisis técnico y relaciones entre conceptos → hasta 22 pts
+  · Solo definiciones copiadas sin explicación propia = máx 8 pts
+  · Texto escaso o superficial = máx 10 pts
+
+- ejemplos (0-20): casos prácticos, ejercicios resueltos, aplicaciones reales
+  · Sin ningún ejemplo = 0 pts
+  · Menciona ejemplos pero no los desarrolla = máx 6 pts
+  · Ejemplos desarrollados paso a paso = hasta 18 pts
+
+- cobertura (0-20): amplitud temática real; cuántas semanas/unidades cubre CON CONTENIDO REAL
+  · Solo cubre 1 tema superficialmente = máx 6 pts
+  · Cubre 2-3 temas con algo de desarrollo = hasta 12 pts
+  · Cubre ampliamente múltiples temas = hasta 20 pts
+
 - legibilidad (0-10): claridad, ortografía, formato limpio, fácil de seguir
+  · Texto confuso o con muchos errores = máx 4 pts
+
+⚠️ PENALIZACIONES OBLIGATORIAS (aplica antes de asignar score):
+  · Menos de 200 palabras reales: MÁXIMO 28 puntos total → rechazado
+  · Entre 200-400 palabras sin desarrollo: MÁXIMO 42 puntos → máximo 1-estrella
+  · Solo lista de títulos/bullets sin explicación: MÁXIMO 38 puntos → rechazado
+  · Texto copiado literalmente sin elaboración del estudiante: MÁXIMO 38 puntos
+  · Sin estructura visible (todo en párrafo sin orden): -10 puntos de penalización
+  · Documento que no aporta valor real a otro estudiante: MÁXIMO 35 puntos
+
+ANCLAS DE CALIBRACIÓN — a qué equivale cada puntaje:
+  10-25 → Borrador casi vacío, notas sueltas inútiles para otros estudiantes. RECHAZADO.
+  26-44 → Muy pobre: algunos títulos con poca información. No vale dinero.
+  45-57 → Básico: tiene algo de contenido pero muy limitado. 1 estrella, máx S/. 5.
+  58-69 → Aceptable: organizado y cubre lo mínimo. Un estudiante lo aprovecha medianamente.
+  70-79 → Bueno: bien estructurado, con ejemplos, claramente útil para estudiar.
+  80-89 → Muy bueno: completo, ordenado, podría complementar un libro de texto.
+  90-100 → Excepcional: podría reemplazar ir a clase. Calidad de tutor o docente.
 
 CONVERSIÓN DE SCORE A ESTRELLAS:
-  score  0-39  → 0 estrellas → "rechazado"    (no publicable)
-  score 40-54  → 1 estrella  → "1-estrella"   (muy básico, precio máx S/. 5)
-  score 55-69  → 2 estrellas → "2-estrellas"  (básico con valor, precio S/. 2-12)
+  score  0-44  → 0 estrellas → "rechazado"    (no publicable)
+  score 45-57  → 1 estrella  → "1-estrella"   (muy básico, precio máx S/. 5)
+  score 58-69  → 2 estrellas → "2-estrellas"  (básico con valor, precio S/. 2-12)
   score 70-79  → 3 estrellas → "3-estrellas"  (buen apunte, precio S/. 5-20)
   score 80-89  → 4 estrellas → "4-estrellas"  (alta calidad, precio S/. 10-35)
-  score 90-100 → 5 estrellas → "precio-libre" (excelente, EL CREADOR PONE EL PRECIO QUE QUIERA, sugerido S/. 20+)
+  score 90-100 → 5 estrellas → "precio-libre" (excelente, EL CREADOR PONE EL PRECIO QUE QUIERA, sugerido S/. 25+)
 
-REFERENCIAS ORIENTATIVAS DE SCORE:
-· Monografía bien estructurada con fuentes: 75–88
-· Prácticas resueltas completas y detalladas: 72–90
-· Apuntes ciclos VI-X bien elaborados: 68–85
-· Apuntes ciclos I-V ordenados y completos: 55–72
-· Guía de estudio esquemática pero útil: 60–78
-· Resumen de capítulo fiel y organizado: 50–70
-· Apuntes desorganizados de cualquier ciclo: 30–54
-· Contenido copiado/pegado sin elaboración: 25–45
+REFERENCIAS DE SCORE (calibradas con RIGOR):
+· Apunte casi vacío / solo títulos: 10–30 → RECHAZADO
+· Apuntes desorganizados de cualquier ciclo: 25–44 → RECHAZADO
+· Contenido copiado/pegado sin elaboración: 28–44 → RECHAZADO
+· Resumen de capítulo básico y fiel: 45–57 → 1 estrella
+· Apuntes ciclos I-V apenas organizados: 48–60 → 1-2 estrellas
+· Guía de estudio esquemática pero útil: 55–66 → 1-2 estrellas
+· Apuntes ciclos I-V ordenados y con ejemplos: 58–68 → 2 estrellas
+· Resumen de capítulo bien elaborado: 60–70 → 2-3 estrellas
+· Prácticas resueltas con pasos claros: 65–80 → 2-3 estrellas
+· Apuntes ciclos VI-X bien elaborados: 70–82 → 3-4 estrellas
+· Monografía bien estructurada con fuentes: 72–85 → 3-4 estrellas
+· Prácticas resueltas completas y detalladas: 75–88 → 3-4 estrellas
+· Apunte excepcional que reemplaza asistir a clase: 90–100 → 5 estrellas (MUY RARO)
 
 ════════════════════════════════════════
 PASO 4 — PRECIO SUGERIDO

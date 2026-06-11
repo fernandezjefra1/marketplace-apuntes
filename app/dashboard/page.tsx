@@ -204,8 +204,68 @@ function Card3D({ apunte, index }: { apunte: any; index: number }) {
   )
 }
 
+function MedalBadge({ rank }: { rank: number }) {
+  const m = rank === 1 ? { emoji: '🥇', bg: '#FEF9C3', color: '#92400E' }
+           : rank === 2 ? { emoji: '🥈', bg: '#F1F5F9', color: '#475569' }
+           : { emoji: '🥉', bg: '#FFF7ED', color: '#C2410C' }
+  return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-black"
+      style={{ backgroundColor: m.bg, color: m.color }}>{m.emoji}</span>
+  )
+}
+
+function TopCard({ apunte, rank }: { apunte: any; rank: number }) {
+  const c = CM[apunte.carrera] ?? DEF
+  const estrellas = apunte.banda_precio === 'precio-libre' ? 5
+    : apunte.banda_precio === '4-estrellas' ? 4
+    : apunte.banda_precio === '3-estrellas' ? 3
+    : apunte.banda_precio === '2-estrellas' ? 2
+    : apunte.banda_precio === '1-estrella'  ? 1 : 0
+  return (
+    <div onClick={() => window.location.href = `/apunte/${apunte.id}`}
+      className="flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1"
+      style={{ width: 200, background: 'rgba(255,255,255,.95)', border: `1.5px solid ${c.a}22`, boxShadow: '0 4px 18px rgba(0,0,0,.07)' }}>
+      {/* Top color bar */}
+      <div className="h-1" style={{ background: `linear-gradient(90deg,${c.a},${c.b})` }} />
+      <div className="p-3.5">
+        <div className="flex items-center justify-between mb-2">
+          <MedalBadge rank={rank} />
+          <span className="text-xs font-black px-2 py-0.5 rounded-lg text-white"
+            style={{ background: apunte.precio > 0 ? `linear-gradient(135deg,${c.a},${c.b})` : 'linear-gradient(135deg,#166534,#16A34A)', fontSize: 10 }}>
+            {apunte.precio > 0 ? `S/. ${apunte.precio}` : 'GRATIS'}
+          </span>
+        </div>
+        <p className="font-black text-gray-800 text-xs leading-snug line-clamp-2 mb-1.5" style={{ fontSize: 12 }}>{apunte.titulo}</p>
+        {apunte.curso && <p className="text-xs mb-2 line-clamp-1" style={{ color: c.a, fontSize: 10, fontWeight: 600 }}>{apunte.curso}</p>}
+        {/* Stars */}
+        <div className="flex gap-0.5 mb-2">
+          {[1,2,3,4,5].map(i => (
+            <span key={i} style={{ fontSize: 12, filter: i <= estrellas ? 'none' : 'grayscale(1) opacity(.2)' }}>⭐</span>
+          ))}
+        </div>
+        {apunte.score_ia != null && (
+          <div>
+            <div className="flex justify-between mb-1">
+              <span style={{ fontSize: 9, color: '#9CA3AF' }}>Score IA</span>
+              <span style={{ fontSize: 10, fontWeight: 900, color: c.a }}>{apunte.score_ia}/100</span>
+            </div>
+            <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${apunte.score_ia}%`, background: `linear-gradient(90deg,${c.a},${c.b})` }} />
+            </div>
+          </div>
+        )}
+        {apunte.resumen_ia && (
+          <p className="text-gray-400 mt-2 line-clamp-2" style={{ fontSize: 10 }}>{apunte.resumen_ia}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [apuntes, setApuntes]             = useState<any[]>([])
+  const [topGrupos, setTopGrupos]         = useState<{ carrera: string; lista: any[] }[]>([])
+  const [tabTop, setTabTop]               = useState('')
   const [busqueda, setBusqueda]           = useState('')
   const [carreraFiltro, setCarreraFiltro] = useState('')
   const [cicloFiltro, setCicloFiltro]     = useState('')
@@ -221,8 +281,20 @@ export default function Dashboard() {
   }, [])
 
   const cargarApuntes = async () => {
-    const { data } = await supabase.from('apuntes').select('*').order('created_at', { ascending: false })
+    const [{ data }, { data: topData }] = await Promise.all([
+      supabase.from('apuntes').select('*').order('created_at', { ascending: false }),
+      supabase.from('apuntes').select('*').gte('score_ia', 70).order('score_ia', { ascending: false }).limit(32),
+    ])
     setApuntes(data || [])
+    // Agrupar top por carrera, máximo 5 por carrera
+    const grupos: Record<string, any[]> = {}
+    for (const a of topData || []) {
+      if (!grupos[a.carrera]) grupos[a.carrera] = []
+      if (grupos[a.carrera].length < 5) grupos[a.carrera].push(a)
+    }
+    const lista = Object.entries(grupos).map(([carrera, lista]) => ({ carrera, lista }))
+    setTopGrupos(lista)
+    if (lista.length > 0) setTabTop(lista[0].carrera)
     setLoading(false)
   }
 
@@ -527,6 +599,64 @@ export default function Dashboard() {
                 )}
               </button>
             </div>
+
+            {/* ── TOP IA POR CARRERA ── */}
+            {!loading && !hayFiltros && topGrupos.length > 0 && (
+              <section className="mb-8 rounded-2xl overflow-hidden"
+                style={{ background: 'rgba(255,255,255,.82)', backdropFilter: 'blur(16px)', border: '1.5px solid rgba(255,255,255,.9)', boxShadow: '0 4px 24px rgba(0,0,0,.07)' }}>
+                {/* Header */}
+                <div className="px-5 pt-5 pb-3 flex items-center justify-between"
+                  style={{ borderBottom: '1px solid rgba(243,244,246,.8)' }}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base"
+                      style={{ background: 'linear-gradient(135deg,#D97706,#F59E0B)', boxShadow: '0 4px 10px rgba(217,119,6,.3)' }}>
+                      🏆
+                    </div>
+                    <div>
+                      <h2 className="font-black text-gray-800 text-sm leading-none">Mejores apuntes por carrera</h2>
+                      <p className="text-xs text-gray-400 mt-0.5">Seleccionados por análisis de calidad IA · 3+ estrellas</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-xl"
+                    style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>
+                    IA curado
+                  </span>
+                </div>
+
+                {/* Tabs de carrera */}
+                <div className="px-5 pt-3 flex gap-2 overflow-x-auto pb-1"
+                  style={{ scrollbarWidth: 'none' }}>
+                  {topGrupos.map(({ carrera }) => {
+                    const m = CM[carrera] ?? DEF
+                    return (
+                      <button key={carrera} onClick={() => setTabTop(carrera)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex-shrink-0 transition-all duration-200"
+                        style={tabTop === carrera ? {
+                          background: `linear-gradient(135deg,${m.a},${m.b})`,
+                          color: 'white',
+                          boxShadow: `0 4px 12px ${m.a}45`,
+                        } : {
+                          backgroundColor: 'rgba(243,244,246,.8)',
+                          color: '#6B7280',
+                        }}>
+                        <span>{m.icon}</span>
+                        <span>{carrera.split(' ').slice(0, 2).join(' ')}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Cards horizontales */}
+                <div className="px-5 pt-3 pb-5 flex gap-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                  {(topGrupos.find(g => g.carrera === tabTop)?.lista ?? []).map((ap, i) => (
+                    <TopCard key={ap.id} apunte={ap} rank={i + 1} />
+                  ))}
+                  {(topGrupos.find(g => g.carrera === tabTop)?.lista ?? []).length === 0 && (
+                    <p className="text-sm text-gray-400 py-4">Sin apuntes de alta calidad en esta carrera todavía.</p>
+                  )}
+                </div>
+              </section>
+            )}
 
             {/* Cards */}
             {loading ? (
